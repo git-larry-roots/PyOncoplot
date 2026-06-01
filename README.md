@@ -1,18 +1,14 @@
 # pyoncoplot
 
+## Documentation
+
+- Published docs: [gitbenlewis.github.io/pyoncoplot](https://gitbenlewis.github.io/pyoncoplot/)
+- Source docs: [docs/index.md](docs/index.md)
+- Start with [quickstart examples](docs/quickstart.md), [input schemas](docs/data-inputs.md), [metadata and TMB usage](docs/metadata-and-tmb.md), [gallery recreation](docs/gallery.md), and [migration notes for ggoncoplot users](docs/migration-from-ggoncoplot.md).
+
 `pyoncoplot` is a Pythonic implementation of oncoplots inspired by the
 R package `ggoncoplot`. It accepts mutation-level tabular data and can render
 interactive Plotly oncoplots or static Matplotlib figures.
-
-## Documentation
-
-Full documentation lives in [docs/index.md](docs/index.md), including:
-
-- [quickstart examples](docs/quickstart.md)
-- [input schemas](docs/data-inputs.md)
-- [metadata and TMB usage](docs/metadata-and-tmb.md)
-- [gallery recreation](docs/gallery.md)
-- [migration notes for ggoncoplot users](docs/migration-from-ggoncoplot.md)
 
 ## Install for Development
 
