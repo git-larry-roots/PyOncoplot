@@ -23,24 +23,11 @@ gallery_params:
       tracks: gbm_clinical_tracks.tsv
       events: gbm_events.tsv
       palette: gbm_palette.json
-    sv:
-      depth: sv_depth.tsv
-      allele_fraction: sv_allele_fraction.tsv
-      gene_models: sv_gene_models.tsv
     readme:
       mutations: ggoncoplot_readme_mutations.tsv
       metadata: ggoncoplot_readme_metadata.tsv
       tmb: ggoncoplot_readme_tmb.tsv
       palette: ggoncoplot_readme_palette.json
-    multimodal:
-      samples: paper_multimodal_samples.tsv
-      points: paper_multimodal_points.tsv
-      events: paper_multimodal_events.tsv
-      clinical: paper_multimodal_clinical.tsv
-      selection: paper_multimodal_selection.tsv
-      palette: paper_multimodal_palette.json
-    comparison_table:
-      table: ggoncoplot_comparison_table.tsv
 
   shared:
     aml_mutations_source: &aml_mutations_source {path: syntheitic_goal_data/aml_mutations.tsv, sep: "\t"}
@@ -369,29 +356,6 @@ gallery_params:
       palette: *readme_palette
       tmb_data: *readme_tmb_source
       tmb_palette: *readme_palette
-    paper_multimodal_genes: &paper_multimodal_genes
-      [PIK3CA, TP53, CDH1, GATA3, MAP3K1, PTEN, NF1, BRCA1, RB1, EGFR]
-    paper_multimodal_axes: &paper_multimodal_axes
-      tsne: [0.045, 0.635, 0.255, 0.285]
-      umap: [0.325, 0.635, 0.255, 0.285]
-      main: [0.075, 0.205, 0.760, 0.360]
-      clinical: [0.075, 0.075, 0.760, 0.085]
-      legend: [0.850, 0.130, 0.130, 0.760]
-    paper_multimodal_marker_style: &paper_multimodal_marker_style
-      reference_output_width: 2281
-      point_size: 170
-      selected_point_size: 340
-      edge_linewidth: 0.35
-      selected_linewidth: 1.9
-      max_scale: 3.0
-    paper_multimodal_title_style: &paper_multimodal_title_style
-      min_font_size: 14
-      max_font_size: 52
-      width_divisor: 160
-    paper_multimodal_panel_title_style: &paper_multimodal_panel_title_style
-      min_font_size: 9
-      max_font_size: 30
-      width_divisor: 280
 
   synthetic_inputs:
     brca:
@@ -587,69 +551,6 @@ gallery_params:
       extra_tmb_type_count_range: [1, 3]
       extra_tmb_mutations_range: [1, 9]
 
-    multimodal:
-      seed: 707
-      sample_prefix: GSM
-      sample_count: 147
-      selected_count: 30
-      classes: [Triple Negative, Not Triple Negative, Ambiguous]
-      class_weights: [0.24, 0.64, 0.12]
-      selected_class: Triple Negative
-      centers:
-        Triple Negative: [-2.2, 1.4]
-        Not Triple Negative: [1.2, -0.8]
-        Ambiguous: [0.0, 1.8]
-      tsne_sd: [0.75, 0.72]
-      umap_center_scale: 0.62
-      umap_sd: [1.1, 1.0]
-      pr_status_weights: {values: [Positive, Negative], weights: [0.70, 0.30]}
-      er_status_weights: {values: [Positive, Negative], weights: [0.76, 0.24]}
-      ambiguous_her2_values: [Positive, Negative]
-      gene_probabilities:
-        PIK3CA: 0.33
-        TP53: 0.31
-        CDH1: 0.12
-        GATA3: 0.11
-        MAP3K1: 0.09
-        PTEN: 0.08
-        NF1: 0.07
-        BRCA1: 0.06
-        RB1: 0.06
-        EGFR: 0.05
-      selected_gene_multiplier: {genes: [TP53, BRCA1, RB1, EGFR], multiplier: 2.0}
-      class_gene_multipliers:
-        Not Triple Negative: {genes: [PIK3CA, GATA3, MAP3K1], multiplier: 1.45}
-      alteration_weights:
-        Mutation: 0.70
-        Amplification: 0.13
-        Deletion: 0.13
-        Fusion: 0.04
-      max_probability: 0.88
-      selection_vertices:
-        - {vertex: 1, x: -3.45, y: 0.45}
-        - {vertex: 2, x: -2.50, y: 2.65}
-        - {vertex: 3, x: -1.15, y: 2.25}
-        - {vertex: 4, x: -0.80, y: 0.95}
-        - {vertex: 5, x: -3.45, y: 0.45}
-      palette:
-        Mutation: "#244A7F"
-        Amplification: "#B74A5A"
-        Deletion: "#5DA8A3"
-        Fusion: "#D1A12B"
-        Triple Negative: "#111111"
-        Not Triple Negative: "#E43D30"
-        Ambiguous: "#BDBDBD"
-        Selected: "#E43D30"
-        Unselected: "#BDBDBD"
-
-    comparison_table:
-      rows:
-        - {package: ggoncoplot, tidy input: "Yes", interactive: "Yes", linked selection: "Yes", metadata: "Yes", auto palette: "Yes", notes: Python target}
-        - {package: ComplexHeatmap, tidy input: "No", interactive: Shiny, linked selection: Limited, metadata: "Yes", auto palette: Manual, notes: Matrix-first}
-        - {package: maftools, tidy input: MAF, interactive: "No", linked selection: "No", metadata: "Yes", auto palette: MAF classes, notes: Cancer-focused}
-        - {package: genVisR, tidy input: Wide, interactive: "No", linked selection: "No", metadata: "Yes", auto palette: Manual, notes: Static}
-        - {package: cBioPortal, tidy input: Portal, interactive: "Yes", linked selection: Partial, metadata: "Yes", auto palette: Preset, notes: Web app}
-
   plot_runs:
     brca_large:
       run: true
@@ -789,130 +690,12 @@ gallery_params:
             tile_linewidth: 0.03
         save: {dpi: 120}
 
-    ggoncoplot_package_mark:
-      run: true
-      renderer: package_mark
-      style: clean
-      output_name: gen.goal_plot_06.png
-      goal_plot: goal_plot_06.png
-      expected_size: [125, 144]
-      feature_axes_min: 1
-      params:
-        figure_size: [1.25, 1.44]
-        title: "Pyoncoplot"
-        save: {dpi: 100}
-
-    ggoncoplot_interactive_snapshot:
-      run: true
-      renderer: interactive_snapshot
-      style: clean
-      output_name: gen.goal_plot_07.png
-      goal_plot: goal_plot_07.png
-      expected_size: [1566, 1036]
-      feature_axes_min: 3
-      params:
-        figure_size: [15.66, 10.36]
-        genes: [PIK3CA, TP53, CDH1, GATA3, MAP3K1, PTEN, KMT2C, NF1]
-        title: "Interactive oncoplot snapshot"
-        save: {dpi: 100}
-
-    ggoncoplot_comparison_table_jats:
-      run: true
-      renderer: comparison_table
-      style: clean
-      output_name: gen.goal_plot_08.png
-      goal_plot: goal_plot_08.png
-      expected_size: [800, 513]
-      feature_axes_min: 1
-      params:
-        figure_size: [8.0, 5.13]
-        title: "Oncoplot package comparison"
-        subtitle: "Compact publication table"
-        compact: true
-        save: {dpi: 100}
-
-    lasso_select:
-      run: true
-      renderer: lasso_scatter
-      style: clean
-      output_name: gen.goal_plot_09.png
-      goal_plot: goal_plot_09.png
-      expected_size: [1408, 922]
-      feature_axes_min: 1
-      params:
-        figure_size: [14.08, 9.22]
-        title: "Lasso-selected expression cluster"
-        save: {dpi: 100}
-
-    multimodal_selection_old:
-      run: true
-      renderer: multimodal_panel
-      style: clean
-      output_name: gen.goal_plot_10.png
-      goal_plot: goal_plot_10.png
-      expected_size: [7620, 5204]
-      feature_axes_min: 4
-      params:
-        figure_size: [76.20, 52.04]
-        variant: old
-        genes: *paper_multimodal_genes
-        tracks: [PR_status, ER_status, HER2_status, Classification]
-        axes: *paper_multimodal_axes
-        marker_style: *paper_multimodal_marker_style
-        title_style: *paper_multimodal_title_style
-        panel_title_style: *paper_multimodal_panel_title_style
-        title: "Multimodal linked selection"
-        show_lasso: false
-        save: {dpi: 100}
-
-    multimodal_selection:
-      run: true
-      renderer: multimodal_panel
-      style: clean
-      output_name: gen.goal_plot_11.png
-      goal_plot: goal_plot_11.png
-      expected_size: [7620, 5204]
-      feature_axes_min: 4
-      params:
-        figure_size: [76.20, 52.04]
-        variant: current
-        genes: *paper_multimodal_genes
-        tracks: [PR_status, ER_status, HER2_status, Classification]
-        axes: *paper_multimodal_axes
-        marker_style: *paper_multimodal_marker_style
-        title_style: *paper_multimodal_title_style
-        panel_title_style: *paper_multimodal_panel_title_style
-        title: "Multimodal sample selection"
-        show_lasso: false
-        save: {dpi: 100}
-
-    multimodal_selection_with_lasso:
-      run: true
-      renderer: multimodal_panel
-      style: clean
-      output_name: gen.goal_plot_12.png
-      goal_plot: goal_plot_12.png
-      expected_size: [2281, 1520]
-      feature_axes_min: 4
-      params:
-        figure_size: [22.81, 15.20]
-        variant: lasso
-        genes: *paper_multimodal_genes
-        tracks: [PR_status, ER_status, HER2_status, Classification]
-        axes: *paper_multimodal_axes
-        marker_style: *paper_multimodal_marker_style
-        title_style: *paper_multimodal_title_style
-        panel_title_style: *paper_multimodal_panel_title_style
-        title: "Multimodal selection with lasso"
-        show_lasso: true
-        save: {dpi: 100}
-
     paper_gbm_oncoplot:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_13.png
-      goal_plot: goal_plot_13.png
+      output_name: gen.goal_plot_06.png
+      goal_plot: goal_plot_06.png
       expected_size: [864, 432]
       feature_axes_min: 3
       params:
@@ -930,8 +713,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_14.png
-      goal_plot: goal_plot_14.png
+      output_name: gen.goal_plot_07.png
+      goal_plot: goal_plot_07.png
       expected_size: [850, 683]
       feature_axes_min: 4
       params: &brca_compact_params
@@ -949,8 +732,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_15.png
-      goal_plot: goal_plot_15.png
+      output_name: gen.goal_plot_08.png
+      goal_plot: goal_plot_08.png
       expected_size: [1400, 700]
       feature_axes_min: 4
       params:
@@ -965,8 +748,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_16.png
-      goal_plot: goal_plot_16.png
+      output_name: gen.goal_plot_09.png
+      goal_plot: goal_plot_09.png
       expected_size: [1080, 436]
       feature_axes_min: 3
       params:
@@ -984,8 +767,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_17.png
-      goal_plot: goal_plot_17.png
+      output_name: gen.goal_plot_10.png
+      goal_plot: goal_plot_10.png
       expected_size: [1080, 720]
       feature_axes_min: 3
       params:
@@ -1000,8 +783,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_18.png
-      goal_plot: goal_plot_18.png
+      output_name: gen.goal_plot_11.png
+      goal_plot: goal_plot_11.png
       expected_size: [1080, 720]
       clean_only: true
       feature_axes_min: 4
@@ -1026,8 +809,8 @@ gallery_params:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_19.png
-      goal_plot: goal_plot_19.png
+      output_name: gen.goal_plot_12.png
+      goal_plot: goal_plot_12.png
       expected_size: [1080, 720]
       clean_only: true
       feature_axes_min: 4
@@ -1048,27 +831,12 @@ gallery_params:
             font_size_title: 14
         save: {dpi: 120}
 
-    sv_panel:
-      run: true
-      renderer: sv_panel
-      style: clean
-      output_name: gen.goal_plot_20.png
-      goal_plot: goal_plot_20.png
-      expected_size: [1296, 864]
-      feature_axes_min: 6
-      params:
-        samples: [NA18973, NA10831, NA19109]
-        figure_size: [12.96, 8.64]
-        depth_ylim: [-15, 120]
-        allele_ylim: [-0.12, 1.1]
-        save: {dpi: 100}
-
     aml_metadata_survival:
       run: true
       renderer: oncoplot
       style: clean
-      output_name: gen.goal_plot_21.png
-      goal_plot: goal_plot_21.png
+      output_name: gen.goal_plot_13.png
+      goal_plot: goal_plot_13.png
       expected_size: [1080, 720]
       clean_only: true
       feature_axes_min: 4
@@ -1100,5 +868,5 @@ gallery_params:
     brca_compact_complex:
       run: true
       clean_preset: brca_compact_complex
-      output_name: compare.goal_plot_14.png
+      output_name: compare.goal_plot_07.png
       expected_size: [1240, 398]

@@ -2,7 +2,7 @@
 
 This script intentionally does not import fuc. It mirrors the relevant fuc
 example data transformations so the gallery can render from committed TSV/JSON
-fixtures without requiring fuc or large raw MAF/VCF files at runtime.
+fixtures without requiring fuc or large raw MAF files at runtime.
 """
 
 from __future__ import annotations
@@ -48,50 +48,12 @@ NONSYN_COLORS = [
 SOURCE_URLS = {
     "tcga_laml.maf.gz": "https://raw.githubusercontent.com/sbslee/fuc-data/main/tcga-laml/tcga_laml.maf.gz",
     "tcga_laml_annot.tsv": "https://raw.githubusercontent.com/sbslee/fuc-data/main/tcga-laml/tcga_laml_annot.tsv",
-    "getrm-cyp2d6-vdr.vcf": "https://raw.githubusercontent.com/sbslee/fuc-data/main/pyvcf/getrm-cyp2d6-vdr.vcf",
 }
 
 SOURCE_SUBDIRS = {
     "tcga_laml.maf.gz": "tcga-laml",
     "tcga_laml_annot.tsv": "tcga-laml",
-    "getrm-cyp2d6-vdr.vcf": "pyvcf",
 }
-
-SV_SAMPLE_MAP = {
-    "NA18973": "NA18973",
-    "NA10831": "HG00276",
-    "NA19109": "NA19109",
-}
-
-SV_TITLES = {
-    "NA18973": "NA18973 (no structural variation)",
-    "NA10831": "NA10831 (CYP2D6 deletion)",
-    "NA19109": "NA19109 (CYP2D6 duplication)",
-}
-
-CYP2D6_EXONS = [
-    (42522500, 42522754),
-    (42522852, 42522994),
-    (42523448, 42523636),
-    (42523843, 42523985),
-    (42524175, 42524352),
-    (42524785, 42524946),
-    (42525034, 42525187),
-    (42525739, 42525911),
-    (42526613, 42526883),
-]
-
-CYP2D7_EXONS = [
-    (42536213, 42536467),
-    (42536565, 42536707),
-    (42537161, 42537349),
-    (42537543, 42537685),
-    (42537877, 42538054),
-    (42538479, 42538640),
-    (42538728, 42538881),
-    (42539410, 42539582),
-    (42540284, 42540576),
-]
 
 
 def sha256(path: Path) -> str:
@@ -229,90 +191,6 @@ def build_aml(source_dir: Path) -> dict[str, object]:
     }
 
 
-def parse_sample(format_keys: list[str], value: str) -> dict[str, str]:
-    parts = value.split(":")
-    return {key: parts[index] if index < len(parts) else "." for index, key in enumerate(format_keys)}
-
-
-def numeric_format_value(parsed: dict[str, str], key: str) -> float:
-    value = parsed.get(key, ".")
-    if value in {"", "."}:
-        return np.nan
-    try:
-        return float(value)
-    except ValueError:
-        return np.nan
-
-
-def allele_fraction(parsed: dict[str, str], allele: str) -> float:
-    value = parsed.get("AD", ".")
-    if value in {"", "."}:
-        return np.nan
-    try:
-        depths = [int(part) for part in value.split(",")]
-    except ValueError:
-        return np.nan
-    total = sum(depths)
-    if total == 0:
-        return np.nan
-    if allele == "REF":
-        return depths[0] / total
-    return sum(depths[1:]) / total
-
-
-def build_sv(source_dir: Path) -> dict[str, object]:
-    vcf_path = source_file(source_dir, "getrm-cyp2d6-vdr.vcf")
-    header: list[str] | None = None
-    depth_rows = []
-    allele_rows = []
-    with vcf_path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.rstrip("\n")
-            if line.startswith("##"):
-                continue
-            if line.startswith("#CHROM"):
-                header = line.lstrip("#").split("\t")
-                continue
-            if not line:
-                continue
-            if header is None:
-                raise ValueError("VCF header was not found.")
-            row = dict(zip(header, line.split("\t")))
-            format_keys = row["FORMAT"].split(":")
-            position = int(row["POS"])
-            for display_sample, source_sample in SV_SAMPLE_MAP.items():
-                parsed = parse_sample(format_keys, row[source_sample])
-                depth_rows.append(
-                    {
-                        "sample": display_sample,
-                        "source_sample": source_sample,
-                        "title": SV_TITLES[display_sample],
-                        "position": position,
-                        "depth": numeric_format_value(parsed, "DP"),
-                    }
-                )
-                for allele in ("REF", "ALT"):
-                    allele_rows.append(
-                        {
-                            "sample": display_sample,
-                            "source_sample": source_sample,
-                            "position": position,
-                            "allele": allele,
-                            "allele_fraction": allele_fraction(parsed, allele),
-                        }
-                    )
-
-    pd.DataFrame(depth_rows).to_csv(INPUTS / "sv_depth.tsv", sep="\t", index=False)
-    pd.DataFrame(allele_rows).to_csv(INPUTS / "sv_allele_fraction.tsv", sep="\t", index=False)
-
-    gene_rows = []
-    for gene, exons in {"CYP2D6": CYP2D6_EXONS, "CYP2D7": CYP2D7_EXONS}.items():
-        for index, (start, end) in enumerate(exons, start=1):
-            gene_rows.append({"gene": gene, "exon": index, "start": start, "end": end, "strand": "-"})
-    pd.DataFrame(gene_rows).to_csv(INPUTS / "sv_gene_models.tsv", sep="\t", index=False)
-    return {"positions": int(len(depth_rows) / len(SV_SAMPLE_MAP)), "samples": list(SV_SAMPLE_MAP)}
-
-
 def fixture_checksums() -> dict[str, str]:
     names = [
         "aml_mutations.tsv",
@@ -320,9 +198,6 @@ def fixture_checksums() -> dict[str, str]:
         "aml_tmb.tsv",
         "aml_palette.json",
         "aml_gallery_params.json",
-        "sv_depth.tsv",
-        "sv_allele_fraction.tsv",
-        "sv_gene_models.tsv",
     ]
     return {name: sha256(INPUTS / name) for name in names}
 
@@ -333,29 +208,27 @@ def main() -> None:
         "--source-dir",
         type=Path,
         default=Path.home() / "fuc-data",
-        help="Directory containing tcga_laml.maf.gz, tcga_laml_annot.tsv, and getrm-cyp2d6-vdr.vcf.",
+        help="Directory containing tcga_laml.maf.gz and tcga_laml_annot.tsv.",
     )
     args = parser.parse_args()
     INPUTS.mkdir(exist_ok=True)
     source_dir = args.source_dir.expanduser()
     aml = build_aml(source_dir)
-    sv = build_sv(source_dir)
     manifest = {
         "source_urls": SOURCE_URLS,
         "source_checksums": {
             name: sha256(source_file(source_dir, name))
-            for name in ["tcga_laml.maf.gz", "tcga_laml_annot.tsv", "getrm-cyp2d6-vdr.vcf"]
+            for name in ["tcga_laml.maf.gz", "tcga_laml_annot.tsv"]
         },
         "source_scripts": {
-            "goal_plot_17.png": "oncoplot.py",
-            "goal_plot_18.png": "customized_oncoplot_1.py",
-            "goal_plot_19.png": "customized_oncoplot_2.py",
-            "goal_plot_20.png": "vcf_sv.py",
-            "goal_plot_21.png": "customized_oncoplot_3.py",
+            "goal_plot_10.png": "oncoplot.py",
+            "goal_plot_11.png": "customized_oncoplot_1.py",
+            "goal_plot_12.png": "customized_oncoplot_2.py",
+            "goal_plot_13.png": "customized_oncoplot_3.py",
         },
-        "goal_plot_21_sha256": sha256(GOAL_PLOTS / "goal_plot_21.png") if (GOAL_PLOTS / "goal_plot_21.png").exists() else None,
+        "goal_plot_13_sha256": sha256(GOAL_PLOTS / "goal_plot_13.png") if (GOAL_PLOTS / "goal_plot_13.png").exists() else None,
         "derived_fixture_checksums": fixture_checksums(),
-        "summary": {"aml": aml, "sv": sv},
+        "summary": {"aml": aml},
     }
     (ROOT / "fuc_sources" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest["summary"], indent=2))

@@ -37,9 +37,8 @@ GENERATED_ROOT = GOAL_SOURCE_ROOT / "generated_plots"
 CLEAN_OUT = _resolve_repo_path(OUTPUT_DIRS.get("clean", GENERATED_ROOT / "clean"))
 COMPARISON_OUT = _resolve_repo_path(OUTPUT_DIRS.get("comparison", GENERATED_ROOT / "comparison"))
 
-# Generated here with public oncoplot(params=CONFIG_PATH, params_key=...):
-# goal plots 01-05, 13-19, and 21. Custom plots 06-12 and 20 are generated
-# by make_other_gallery_plots.py.
+# All active goal plots are generated here with public
+# oncoplot(params=CONFIG_PATH, params_key=...).
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

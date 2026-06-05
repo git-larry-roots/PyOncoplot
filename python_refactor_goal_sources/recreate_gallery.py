@@ -1,11 +1,13 @@
-"""Recreate the full gallery by dispatching to the split renderer scripts."""
+"""Recreate the direct public ``oncoplot()`` gallery."""
 
 from __future__ import annotations
 
 import argparse
+import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
 
+from PIL import Image, ImageDraw
 from pyoncoplot import oncoplot
 
 try:
@@ -18,7 +20,6 @@ try:
         GOAL_PLOTS,
         INPUTS,
     )
-    from python_refactor_goal_sources.make_other_gallery_plots import render_preset as render_other_preset
 except ModuleNotFoundError:  # pragma: no cover - supports ``python path/to/script.py``.
     from make_oncoplots import (  # type: ignore
         CLEAN_OUT,
@@ -29,35 +30,72 @@ except ModuleNotFoundError:  # pragma: no cover - supports ``python path/to/scri
         GOAL_PLOTS,
         INPUTS,
     )
-    from make_other_gallery_plots import render_preset as render_other_preset  # type: ignore
+
+
+def _render_oncoplot_preset(name: str, out_dir: Path) -> Path:
+    run_config = GALLERY_CONFIG["plot_runs"].get(name)
+    if run_config is None:
+        raise ValueError(f"Unknown gallery preset {name!r}.")
+    if run_config.get("style") != "clean" or run_config["renderer"] != "oncoplot":
+        raise ValueError(f"Preset {name!r} is not a direct oncoplot gallery preset.")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / run_config["output_name"]
+    save = dict(run_config["params"]["save"])
+    save["path"] = output_path
+    result = oncoplot(
+        params=CONFIG_PATH,
+        params_key=f"gallery_params.plot_runs.{name}.params.oncoplot",
+        save=save,
+    )
+    if result.backend == "matplotlib":
+        import matplotlib.pyplot as plt
+
+        plt.close(result.figure)
+    return output_path
+
+
+def _render_comparison_sheet(name: str, out_dir: Path) -> Path:
+    comparison_config = GALLERY_CONFIG.get("comparison_runs", {})
+    if name not in comparison_config:
+        raise ValueError("Comparison sheets are only available for configured BRCA gallery presets.")
+
+    run_config = comparison_config[name]
+    clean_name = run_config["clean_preset"]
+    clean_run = GALLERY_CONFIG["plot_runs"][clean_name]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / run_config["output_name"]
+
+    with tempfile.TemporaryDirectory(prefix="pyoncoplot_compare_") as temporary_dir:
+        work_dir = Path(temporary_dir)
+        clean_path = _render_oncoplot_preset(clean_name, work_dir / "clean")
+        original_path = GOAL_PLOTS / clean_run["goal_plot"]
+        labels = ["Original reference", "Clean generated"]
+        paths = [original_path, clean_path]
+        thumb_width = 620
+        thumb_height = 360
+        label_height = 38
+        canvas = Image.new("RGB", (thumb_width * len(paths), thumb_height + label_height), "white")
+        draw = ImageDraw.Draw(canvas)
+        for index, (label, path) in enumerate(zip(labels, paths)):
+            if path.exists():
+                with Image.open(path) as source_image:
+                    image = source_image.convert("RGB")
+                image.thumbnail((thumb_width - 20, thumb_height - 20), Image.Resampling.LANCZOS)
+                x = index * thumb_width + (thumb_width - image.width) // 2
+                y = label_height + (thumb_height - image.height) // 2
+                canvas.paste(image, (x, y))
+            draw.text((index * thumb_width + 12, 10), label, fill="black")
+        canvas.save(output_path)
+    return output_path
 
 
 def render_preset(name: str, out_dir: Optional[Path] = None, style: str = "clean") -> Path:
     if style == "comparison":
-        return render_other_preset(name, out_dir or COMPARISON_OUT, style="comparison")
+        return _render_comparison_sheet(name, out_dir or COMPARISON_OUT)
     if style != "clean":
         raise ValueError("style must be one of: clean, comparison.")
-
-    run_config = GALLERY_CONFIG["plot_runs"].get(name)
-    if run_config is None:
-        raise ValueError(f"Unknown gallery preset {name!r}.")
-    out_dir = out_dir or CLEAN_OUT
-    if run_config["renderer"] == "oncoplot":
-        out_dir.mkdir(parents=True, exist_ok=True)
-        output_path = out_dir / run_config["output_name"]
-        save = dict(run_config["params"]["save"])
-        save["path"] = output_path
-        result = oncoplot(
-            params=CONFIG_PATH,
-            params_key=f"gallery_params.plot_runs.{name}.params.oncoplot",
-            save=save,
-        )
-        if result.backend == "matplotlib":
-            import matplotlib.pyplot as plt
-
-            plt.close(result.figure)
-        return output_path
-    return render_other_preset(name, out_dir, style="clean")
+    return _render_oncoplot_preset(name, out_dir or CLEAN_OUT)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

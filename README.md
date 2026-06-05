@@ -72,10 +72,6 @@ Save the interactive Plotly result as standalone HTML:
 result.save("oncoplot.html")
 ```
 
-Plotly backend screenshot:
-
-![Pyoncoplot Plotly backend example](python_refactor_goal_sources/generated_plots/clean/gen.goal_plot_07.png)
-
 Color the main grid by a continuous variant-level value, such as VAF, while
 keeping mutation-type stacks in the optional gene bar:
 
@@ -170,7 +166,7 @@ result.save("oncoplot.png", dpi=120)
 
 Matplotlib backend screenshot:
 
-![Pyoncoplot Matplotlib backend example](python_refactor_goal_sources/generated_plots/clean/gen.goal_plot_17.png)
+![Pyoncoplot Matplotlib backend example](python_refactor_goal_sources/generated_plots/clean/gen.goal_plot_10.png)
 
 ## Recreate the Example Gallery
 
@@ -181,7 +177,7 @@ python3 python_refactor_goal_sources/recreate_gallery.py
 ```
 
 Generated files are written to `python_refactor_goal_sources/generated_plots/clean/` as
-`gen.goal_plot_01.png` through `gen.goal_plot_21.png`, ordered by source family:
+`gen.goal_plot_01.png` through `gen.goal_plot_13.png`, ordered by source family:
 ggoncoplot/R examples first, other R-based paper examples next, and Python/fuc
 examples last. The original reference images remain untouched. Gallery runs are configured in
 `python_refactor_goal_sources/config.yaml` under `gallery_params.plot_runs`.
@@ -192,7 +188,7 @@ Regenerate non-fuc synthetic fixtures with:
 python3 python_refactor_goal_sources/generate_synthetic_inputs.py
 ```
 
-Regenerate fuc-backed AML/SV fixtures with `python_refactor_goal_sources/fuc_sources/rebuild_fuc_fixtures.py`
+Regenerate fuc-backed AML fixtures with `python_refactor_goal_sources/fuc_sources/rebuild_fuc_fixtures.py`
 after downloading the upstream fuc-data files listed in `python_refactor_goal_sources/fuc_sources/manifest.json`.
 Side-by-side comparison sheets can be rendered separately:
 

@@ -265,85 +265,14 @@ def generate_readme_examples() -> None:
     _write_json(OUT / files["palette"], SHARED["readme_palette"])
 
 
-def generate_paper_multimodal() -> None:
-    settings = SYNTHETIC["multimodal"]
-    files = INPUT_FILES["multimodal"]
-    rng = np.random.default_rng(settings["seed"])
-    samples = [f"{settings['sample_prefix']}-{index:03d}" for index in range(1, settings["sample_count"] + 1)]
-    selected = set(samples[: settings["selected_count"]])
-    classes = rng.choice(settings["classes"], size=len(samples), p=settings["class_weights"])
-    classes[: settings["selected_count"]] = settings["selected_class"]
-
-    point_rows = []
-    clinical_rows = []
-    for sample, classification in zip(samples, classes):
-        cx, cy = settings["centers"][str(classification)]
-        tsne_x = rng.normal(cx, settings["tsne_sd"][0])
-        tsne_y = rng.normal(cy, settings["tsne_sd"][1])
-        umap_x = rng.normal(cx * settings["umap_center_scale"], settings["umap_sd"][0])
-        umap_y = rng.normal(cy * settings["umap_center_scale"], settings["umap_sd"][1])
-        point_rows.append(
-            {
-                "sample": sample,
-                "classification": classification,
-                "tsne_x": round(float(tsne_x), 4),
-                "tsne_y": round(float(tsne_y), 4),
-                "umap_x": round(float(umap_x), 4),
-                "umap_y": round(float(umap_y), 4),
-                "selected": sample in selected,
-            }
-        )
-        clinical_rows.append(
-            {
-                "sample": sample,
-                "Classification": classification,
-                "PR_status": "Negative"
-                if classification == "Triple Negative"
-                else str(rng.choice(settings["pr_status_weights"]["values"], p=settings["pr_status_weights"]["weights"])),
-                "ER_status": "Negative"
-                if classification == "Triple Negative"
-                else str(rng.choice(settings["er_status_weights"]["values"], p=settings["er_status_weights"]["weights"])),
-                "HER2_status": "Negative" if classification != "Ambiguous" else str(rng.choice(settings["ambiguous_her2_values"])),
-            }
-        )
-
-    event_rows = []
-    alteration_weights = settings["alteration_weights"]
-    alteration_probabilities = np.array(list(alteration_weights.values()), dtype=float)
-    alteration_probabilities = alteration_probabilities / alteration_probabilities.sum()
-    selected_multiplier = settings["selected_gene_multiplier"]
-    class_multipliers = settings["class_gene_multipliers"]
-    for sample, classification in zip(samples, classes):
-        for gene in SHARED["paper_multimodal_genes"]:
-            probability = float(settings["gene_probabilities"][gene])
-            if sample in selected and gene in selected_multiplier["genes"]:
-                probability *= float(selected_multiplier["multiplier"])
-            multiplier = class_multipliers.get(str(classification))
-            if multiplier and gene in multiplier["genes"]:
-                probability *= float(multiplier["multiplier"])
-            if rng.random() < min(probability, float(settings["max_probability"])):
-                alteration = str(rng.choice(list(alteration_weights), p=alteration_probabilities))
-                event_rows.append({"sample": sample, "gene": gene, "alteration": alteration, "tooltip": f"{sample} {gene} {alteration}"})
-
-    pd.DataFrame({"sample": samples, "selected": [sample in selected for sample in samples]}).to_csv(OUT / files["samples"], sep="\t", index=False)
-    pd.DataFrame(point_rows).to_csv(OUT / files["points"], sep="\t", index=False)
-    pd.DataFrame(event_rows).to_csv(OUT / files["events"], sep="\t", index=False)
-    pd.DataFrame(clinical_rows).to_csv(OUT / files["clinical"], sep="\t", index=False)
-    pd.DataFrame(settings["selection_vertices"]).to_csv(OUT / files["selection"], sep="\t", index=False)
-    _write_json(OUT / files["palette"], settings["palette"])
-
-
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     generate_brca()
     generate_cssc()
     generate_gbm()
     generate_readme_examples()
-    generate_paper_multimodal()
-    comparison_files = INPUT_FILES["comparison_table"]
-    pd.DataFrame(SYNTHETIC["comparison_table"]["rows"]).to_csv(OUT / comparison_files["table"], sep="\t", index=False)
     print(f"Wrote synthetic inputs to {OUT}")
-    print("Skipped AML and SV: those fuc-backed fixtures are rebuilt with fuc_sources/rebuild_fuc_fixtures.py.")
+    print("Skipped AML: those fuc-backed fixtures are rebuilt with fuc_sources/rebuild_fuc_fixtures.py.")
 
 
 if __name__ == "__main__":

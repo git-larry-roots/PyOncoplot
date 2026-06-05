@@ -13,7 +13,6 @@ from pyoncoplot import load_oncoplot_params, oncoplot
 from python_refactor_goal_sources import (
     generate_synthetic_inputs,
     make_oncoplots,
-    make_other_gallery_plots,
     recreate_gallery,
 )
 from python_refactor_goal_sources.recreate_gallery import (
@@ -36,7 +35,6 @@ OLD_GOAL_PLOT_NAMES = {
     "9c4c2e0f-74b4-4992-82be-57048160.png",
     "7a1ffb71-a4d9-4f42-8cf8-d992b037.png",
     "how-to-go-about-making-a-plot-like-this-v0-7ixn5xszvh3d1.webp",
-    "vcf_sv.png",
 }
 
 EXCLUDED_IMPORTED_ASSET_PATTERNS = {
@@ -59,18 +57,9 @@ REQUIRED_FIXTURES = {
     "cssc_tmb.tsv": {"sample", "alteration", "mutations"},
     "gbm_clinical_tracks.tsv": {"sample", "Recurrence", "Primary", "Sex", "GITS subtype R1"},
     "gbm_events.tsv": {"sample", "gene", "alteration", "tooltip"},
-    "sv_depth.tsv": {"sample", "title", "position", "depth"},
-    "sv_allele_fraction.tsv": {"sample", "position", "allele", "allele_fraction"},
-    "sv_gene_models.tsv": {"gene", "start", "end", "strand"},
     "ggoncoplot_readme_mutations.tsv": {"sample", "gene", "mutation_type", "tooltip", "cohort"},
     "ggoncoplot_readme_metadata.tsv": {"sample", "Subtype", "ER_status", "PR_status", "HER2_status", "TMB_score"},
     "ggoncoplot_readme_tmb.tsv": {"sample", "mutation_type", "mutations"},
-    "paper_multimodal_samples.tsv": {"sample", "selected"},
-    "paper_multimodal_points.tsv": {"sample", "classification", "tsne_x", "tsne_y", "umap_x", "umap_y", "selected"},
-    "paper_multimodal_events.tsv": {"sample", "gene", "alteration", "tooltip"},
-    "paper_multimodal_clinical.tsv": {"sample", "Classification", "PR_status", "ER_status", "HER2_status"},
-    "paper_multimodal_selection.tsv": {"vertex", "x", "y"},
-    "ggoncoplot_comparison_table.tsv": {"package", "tidy input", "interactive", "linked selection", "metadata", "auto palette", "notes"},
 }
 
 ONCOPLOT_CONFIG_RUNS = {
@@ -131,10 +120,6 @@ def test_synthetic_fixture_files_exist_and_load():
     assert "missense" in readme_palette
     assert "Multi_Hit" in readme_palette
 
-    multimodal_palette = json.loads((INPUTS / "paper_multimodal_palette.json").read_text(encoding="utf-8"))
-    assert "Triple Negative" in multimodal_palette
-    assert "Selected" in multimodal_palette
-
 
 def test_synthetic_input_generator_uses_configured_output_names(tmp_path, monkeypatch):
     monkeypatch.setattr(generate_synthetic_inputs, "OUT", tmp_path)
@@ -143,12 +128,11 @@ def test_synthetic_input_generator_uses_configured_output_names(tmp_path, monkey
     generated = {path.name for path in tmp_path.iterdir()}
     expected = {
         filename
-        for family in ("brca", "cssc", "gbm", "readme", "multimodal", "comparison_table")
+        for family in ("brca", "cssc", "gbm", "readme")
         for filename in GALLERY_CONFIG["input_files"][family].values()
     }
-    assert expected <= generated
+    assert generated == expected
     assert "aml_mutations.tsv" not in generated
-    assert "sv_depth.tsv" not in generated
     assert json.loads((tmp_path / GALLERY_CONFIG["input_files"]["brca"]["palette"]).read_text(encoding="utf-8")) == GALLERY_CONFIG["shared"]["brca_palette"]
 
 
@@ -162,7 +146,7 @@ def test_goal_source_paths_and_numbered_reference_plots():
         for path in GOAL_PLOTS.glob("goal_plot_*.png")
         if (match := re.fullmatch(r"goal_plot_(\d+)\.png", path.name))
     )
-    assert goal_plot_numbers == list(range(1, 22))
+    assert goal_plot_numbers == list(range(1, 14))
     assert not (OLD_GOAL_PLOT_NAMES & {path.name for path in GOAL_PLOTS.iterdir() if path.is_file()})
     assert not any(
         pattern in path.name
@@ -196,11 +180,9 @@ def test_source_info_mentions_every_goal_plot_and_sources_new_imports():
 
     assert rows
     for number, line in rows.items():
-        if number >= 9:
-            assert "| resolved |" in line
-            assert "https://" in line
-        else:
-            assert "| unresolved |" not in line or number in {5, 6, 7}
+        assert number in range(1, 14)
+        assert "| resolved |" in line
+        assert "https://" in line
 
 
 def test_gallery_config_loads_and_declares_enabled_runs():
@@ -208,18 +190,19 @@ def test_gallery_config_loads_and_declares_enabled_runs():
     assert "gallery_params" in config
     runs = GALLERY_CONFIG["plot_runs"]
     required = {"renderer", "output_name", "goal_plot", "expected_size", "params"}
-    assert {"aml", "brca", "cssc", "gbm", "sv", "readme", "multimodal", "comparison_table"}.issubset(GALLERY_CONFIG["input_files"])
+    assert {"aml", "brca", "cssc", "gbm", "readme"} == set(GALLERY_CONFIG["input_files"])
     for name, run in runs.items():
         if not run.get("run", True):
             continue
         assert required.issubset(run), name
+        assert run["renderer"] == "oncoplot", name
 
     clean_names = [run["output_name"] for run in CLEAN_RUNS.values()]
-    assert clean_names == [f"gen.goal_plot_{index:02d}.png" for index in range(1, 22)]
+    assert clean_names == [f"gen.goal_plot_{index:02d}.png" for index in range(1, 14)]
     comparison_runs = GALLERY_CONFIG["comparison_runs"]
     assert comparison_runs["brca_large"]["output_name"] == "compare.goal_plot_01.png"
     assert comparison_runs["brca_large"]["expected_size"] == [1240, 398]
-    assert comparison_runs["brca_compact_complex"]["output_name"] == "compare.goal_plot_14.png"
+    assert comparison_runs["brca_compact_complex"]["output_name"] == "compare.goal_plot_07.png"
     assert comparison_runs["brca_compact_complex"]["expected_size"] == [1240, 398]
 
 
@@ -265,29 +248,23 @@ def test_oncoplot_gallery_runs_use_yaml_table_sources():
     assert survival_params["filter_samples_by_isin_lists"] == {"Overall_Survival_Status": ["1"]}
 
 
-def test_split_gallery_scripts_cover_renderer_config():
+def test_gallery_scripts_cover_direct_oncoplot_config():
     clean_runs = {
         name: run
         for name, run in GALLERY_CONFIG["plot_runs"].items()
         if run.get("style") == "clean" and run.get("run", True)
     }
     oncoplot_names = [name for name, run in clean_runs.items() if run["renderer"] == "oncoplot"]
-    custom_names = [
-        name
-        for name, run in clean_runs.items()
-        if run["renderer"] in make_other_gallery_plots.RENDERERS
-    ]
 
     assert "brca_large" in oncoplot_names
-    assert "ggoncoplot_package_mark" in custom_names
-    assert "ggoncoplot_comparison_table" not in GALLERY_CONFIG["plot_runs"]
-    assert set(oncoplot_names).isdisjoint(custom_names)
+    assert len(oncoplot_names) == len(clean_runs)
     assert not hasattr(make_oncoplots, "render_preset")
     assert not hasattr(make_oncoplots, "clean_run_names")
     assert not hasattr(make_oncoplots, "merged_run_config")
+    assert not hasattr(recreate_gallery, "render_other_preset")
 
 
-def test_recreate_gallery_dispatches_to_split_renderers_in_config_order(tmp_path, monkeypatch):
+def test_recreate_gallery_dispatches_to_oncoplot_in_config_order(tmp_path, monkeypatch):
     calls = []
 
     def fake_oncoplot(*, params, params_key, save):
@@ -296,12 +273,7 @@ def test_recreate_gallery_dispatches_to_split_renderers_in_config_order(tmp_path
         calls.append(("oncoplot", name))
         return SimpleNamespace(backend="plotly")
 
-    def fake_other(name, out_dir, style="clean"):
-        calls.append(("comparison" if style == "comparison" else "other", name))
-        return out_dir / GALLERY_CONFIG["plot_runs"].get(name, {"output_name": "comparison.png"})["output_name"]
-
     monkeypatch.setattr(recreate_gallery, "oncoplot", fake_oncoplot)
-    monkeypatch.setattr(recreate_gallery, "render_other_preset", fake_other)
 
     recreate_gallery.main(["--style", "clean", "--out-dir", str(tmp_path)])
 
@@ -357,20 +329,6 @@ def test_oncoplot_config_covers_cssc_gbm_and_brca_gallery_behavior():
     assert gbm_params["options"]["metadata_position"] == "top"
 
 
-def test_multimodal_gallery_points_are_large_enough_for_exported_pngs():
-    params = CLEAN_RUNS["multimodal_selection_with_lasso"]["params"]
-    marker_style = params["marker_style"]
-    assert marker_style["point_size"] >= 64
-    assert marker_style["selected_point_size"] >= 140
-    assert marker_style["selected_linewidth"] >= 1.8
-
-    reference_width = marker_style["reference_output_width"]
-    assert min(marker_style["max_scale"], max(1.0, reference_width / reference_width)) == 1.0
-    assert min(marker_style["max_scale"], max(1.0, 7620 / reference_width)) == marker_style["max_scale"]
-    assert marker_style["point_size"] * marker_style["max_scale"] ** 2 == 1530
-    assert marker_style["selected_point_size"] * marker_style["max_scale"] ** 2 == 3060
-
-
 def test_gallery_titles_use_python_branding_and_scale_for_large_exports():
     configured_titles = {
         name: str(run["params"]["oncoplot"]["options"]["title_text"])
@@ -384,21 +342,9 @@ def test_gallery_titles_use_python_branding_and_scale_for_large_exports():
     assert configured_titles["ggoncoplot_readme_marginal"] == "Pyoncoplot"
     assert configured_titles["ggoncoplot_readme_metadata"] == "Pyoncoplot"
     assert configured_titles["aml_metadata_unsorted"] == "customized_oncoplot_1.py"
-    assert CLEAN_RUNS["ggoncoplot_package_mark"]["params"]["title"] == "Pyoncoplot"
     assert not any("ggoncoplot" in title.lower() for title in configured_titles.values())
     assert CLEAN_RUNS["ggoncoplot_readme_small"]["params"]["oncoplot"]["options"]["font_size_title"] == 14
     assert CLEAN_RUNS["ggoncoplot_readme_basic"]["params"]["oncoplot"]["options"]["font_size_title"] >= 47
-    multimodal_params = CLEAN_RUNS["multimodal_selection"]["params"]
-    output_width = multimodal_params["figure_size"][0] * multimodal_params["save"]["dpi"]
-    title_style = multimodal_params["title_style"]
-    panel_title_style = multimodal_params["panel_title_style"]
-    title_font_size = max(title_style["min_font_size"], min(title_style["max_font_size"], output_width / title_style["width_divisor"]))
-    panel_title_font_size = max(
-        panel_title_style["min_font_size"],
-        min(panel_title_style["max_font_size"], output_width / panel_title_style["width_divisor"]),
-    )
-    assert title_font_size >= 47
-    assert panel_title_font_size >= 27
 
 
 def test_gallery_presets_write_expected_png_dimensions(rendered_clean_gallery):
@@ -412,7 +358,7 @@ def test_gallery_presets_write_expected_png_dimensions(rendered_clean_gallery):
 
 
 def test_new_gallery_outputs_are_generated_not_copied(rendered_clean_gallery):
-    for index in range(1, 22):
+    for index in range(1, 14):
         run = next(run for run in CLEAN_RUNS.values() if run["output_name"] == f"gen.goal_plot_{index:02d}.png")
         output = rendered_clean_gallery / run["output_name"]
         goal = GOAL_PLOTS / f"goal_plot_{index:02d}.png"
@@ -420,7 +366,7 @@ def test_new_gallery_outputs_are_generated_not_copied(rendered_clean_gallery):
 
 
 def test_new_gallery_outputs_have_expected_broad_features(rendered_clean_gallery):
-    for index in (3, 4, 5, 7, 8, 9, 12, 13):
+    for index in (3, 4, 5, 6, 7, 8, 9, 13):
         run = next(run for run in CLEAN_RUNS.values() if run["output_name"] == f"gen.goal_plot_{index:02d}.png")
         output = rendered_clean_gallery / run["output_name"]
         with Image.open(output) as image:
@@ -462,7 +408,7 @@ def test_accepted_aml_metadata_outputs_remain_clean_only_and_featureful(tmp_path
 def test_brca_comparison_sheet_smoke(tmp_path):
     for name, output_name in {
         "brca_large": "compare.goal_plot_01.png",
-        "brca_compact_complex": "compare.goal_plot_14.png",
+        "brca_compact_complex": "compare.goal_plot_07.png",
     }.items():
         output = render_preset(name, tmp_path, style="comparison")
         assert output.exists()

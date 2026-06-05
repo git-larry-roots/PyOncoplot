@@ -20,7 +20,6 @@ REQUIRED_DOCS = [
     "examples/basic.md",
     "examples/metadata.md",
     "examples/brca-gallery.md",
-    "examples/structural-variation-panel.md",
     "migration-from-ggoncoplot.md",
     "development.md",
     "troubleshooting.md",
