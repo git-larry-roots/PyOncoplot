@@ -41,8 +41,8 @@ class OncoplotOptions:
     metadata_legend_position: Literal["right", "bottom"] = "right"
     legend_key_size: float = 1.0
     legend_offsets: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
-    metadata_legend_nrow: Optional[int] = None
-    metadata_legend_ncol: Optional[int] = None
+    metadata_legend_nrow: Optional[int | Mapping[str, int]] = None
+    metadata_legend_ncol: Optional[int | Mapping[str, int]] = None
     metadata_legend_key_size: float = 1.0
 
     tile_height: float = 1.0
@@ -305,8 +305,12 @@ class OncoplotOptions:
             raise ValueError("metadata_max_levels must be >= 1.")
         for name in ("metadata_legend_nrow", "metadata_legend_ncol"):
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
-                raise ValueError(f"{name} must be a positive integer when supplied.")
+            counts = value.values() if isinstance(value, Mapping) else [value]
+            if isinstance(value, Mapping) and any(not isinstance(key, str) for key in value):
+                raise ValueError(f"{name} keys must be original metadata column names (strings).")
+            if any(count is None or isinstance(count, bool) or not isinstance(count, int) or count < 1
+                   for count in counts) and value is not None:
+                raise ValueError(f"{name} must be a positive integer or a mapping of column names to positive integers.")
         if self.gene_bar_scale_n_breaks is not None and self.gene_bar_scale_n_breaks < 1:
             raise ValueError("gene_bar_scale_n_breaks must be >= 1 when supplied.")
         if self.gene_bar_scale_breaks is not None:
@@ -324,3 +328,13 @@ def coerce_options(options: Optional[OncoplotOptions | Mapping[str, Any]]) -> On
     if not isinstance(options, OncoplotOptions):
         raise TypeError("options must be an OncoplotOptions instance, a mapping, or None.")
     return options
+
+
+def validate_metadata_legend_columns(options: OncoplotOptions, columns: Sequence[str]) -> None:
+    """Validate source names even when legends are hidden or the backend rejects mappings."""
+    for name in ("metadata_legend_ncol", "metadata_legend_nrow"):
+        value = getattr(options, name)
+        if isinstance(value, Mapping):
+            unknown = set(value) - set(columns)
+            if unknown:
+                raise ValueError(f"{name} references unknown metadata columns: {sorted(unknown)}")

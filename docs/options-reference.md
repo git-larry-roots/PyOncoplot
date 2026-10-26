@@ -58,8 +58,8 @@ result = oncoplot(
 | `metadata_legend_position` | `"right"` | `"right"` or `"bottom"` |
 | `legend_key_size` | `1.0` | mutation legend key size multiplier |
 | `legend_offsets` | `{}` | per-legend `{"x": ..., "y": ...}` offsets in figure/paper coordinates |
-| `metadata_legend_nrow` | `None` | optional metadata legend row limit |
-| `metadata_legend_ncol` | `None` | optional metadata legend column count |
+| `metadata_legend_nrow` | `None` | positive integer or source-column mapping of row limits |
+| `metadata_legend_ncol` | `None` | positive integer or source-column mapping of column counts |
 | `metadata_legend_key_size` | `1.0` | metadata legend key size multiplier |
 | `legend_label_max_chars` | `None` | optional maximum displayed legend label length |
 | `legend_title_max_chars` | `None` | optional maximum displayed legend title length |
@@ -77,6 +77,18 @@ packing. Positive integer `ncol` requests columns; `nrow` limits rows. With both
 the effective columns are `max(ncol, ceil(entries / nrow))`, matching the legacy
 right-side layout. Entries retain Matplotlib column-major order (down, then
 right); metadata groups retain their display order across measured shelves.
+Both options accept a global positive integer or a mapping keyed by original
+metadata column names. Columns absent from a mapping, including an empty mapping,
+use automatic layout. Each option resolves independently: a global integer can
+be combined with a partial mapping for the other option. Keys must be strings
+matching selected source columns, not prettified/overridden titles or legend-offset
+prefixes. Unknown names are errors even with hidden legends; values must be
+positive integers (not booleans, floats or null). Numeric metadata source names
+are accepted and validated but have no effect on colorbars. Dictionary controls
+require Matplotlib compact mode; legacy Matplotlib and Plotly explicitly reject
+them, including empty dictionaries. See the
+[per-legend synthetic example](examples/per-legend-layout.md).
+
 Explicit columns that cannot fit raise an error instead of silently decreasing
 the request. Numeric colorbars remain automatically packed and right-aligned.
 

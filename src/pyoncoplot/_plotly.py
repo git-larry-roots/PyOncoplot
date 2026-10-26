@@ -18,7 +18,7 @@ from ._metadata_colors import (
     numeric_metadata_colormap_spec,
     sample_numeric_metadata_colormap,
 )
-from ._options import OncoplotOptions, coerce_options
+from ._options import OncoplotOptions, coerce_options, validate_metadata_legend_columns
 from ._params import merge_params
 from ._utils import as_percent, reorder_by_priority
 
@@ -1788,6 +1788,10 @@ def render_plotly_oncoplot(
     metadata_palette = merged["metadata_palette"]
     variant_value_palette = merged["variant_value_palette"]
     options = coerce_options(merged["options"])
+    validate_metadata_legend_columns(options, prepared.metadata_cols or [])
+    if any(isinstance(value, Mapping) for value in
+           (options.metadata_legend_ncol, options.metadata_legend_nrow)):
+        raise NotImplementedError("metadata_legend_ncol/nrow mappings require backend='matplotlib' and compact_layout=True.")
     if any(isinstance(value, Mapping) for value in (prepared.cell_state_palette or {}).values()):
         raise NotImplementedError("State style mappings currently require backend='matplotlib'.")
     defaults = OncoplotOptions()
