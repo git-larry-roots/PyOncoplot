@@ -16,7 +16,7 @@ example = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(example)
 
 
-@pytest.mark.parametrize("width,shared", [(1800, True), (1000, False)])
+@pytest.mark.parametrize("width,shared", [(1800, True), (1200, False)])
 def test_shared_band_and_wrap_geometry(width, shared, tmp_path):
     result = example.publication_example(width=width)
     fig = result.figure
@@ -62,9 +62,16 @@ def test_invariance_and_ratio_defaults():
         assert_frame_equal(getattr(a, key), getattr(b, key))
     p, q = axes_by_name(plain.figure), axes_by_name(styled.figure)
     assert q["main"].get_position().height > p["main"].get_position().height
-    for name, factor in (("tmb", .5), ("metadata", .14/.18)):
-        assert q[name].get_position().height/q["main"].get_position().height == pytest.approx(
-            factor*p[name].get_position().height/p["main"].get_position().height)
+    # Histogram weights also respect the measured multiline-label minimum.
+    assert q["tmb"].get_position().height/q["main"].get_position().height >= (
+        .5*p["tmb"].get_position().height/p["main"].get_position().height)
+    # Metadata is now subject to measured multiline-label minimums. Assert the
+    # requested weight remains a lower bound and the complete labels do not overlap.
+    assert q["metadata"].get_position().height/q["main"].get_position().height >= (
+        .14/.18*p["metadata"].get_position().height/p["main"].get_position().height)
+    styled.figure.canvas.draw()
+    boxes = [t.get_window_extent(styled.figure.canvas.get_renderer()) for t in q["metadata"].get_yticklabels()]
+    assert all(not a.overlaps(b) for i,a in enumerate(boxes) for b in boxes[i+1:])
     default = small(backend="matplotlib")
     axes = axes_by_name(default.figure)
     assert axes["tmb"].get_position().height/axes["main"].get_position().height == pytest.approx(1.2/3)
@@ -180,5 +187,6 @@ def test_multiple_numeric_colorbars_pack_without_overlap():
 def test_new_options_preserve_existing_positional_field_order():
     from dataclasses import fields
     names = [field.name for field in fields(OncoplotOptions)]
-    assert names[-2:] == ["gene_bar_color", "gene_bar_x_label"]
+    assert names[-3:-1] == ["gene_bar_color", "gene_bar_x_label"]
+    assert names[-1] == "legend_gap_points"
     assert names[names.index("sample_id_padding") + 1] == "tmb_bar_color"

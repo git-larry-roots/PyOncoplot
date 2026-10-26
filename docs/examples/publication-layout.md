@@ -87,7 +87,7 @@ All data are synthetic; it never modifies returned axes.
 | `cell_state_palette={"unresolved": {"color": "#F5F5F5", "hatch": "///", "hatch_color": "#888888", "edgecolor": "#BBBBBB", "linewidth": .3}}` | Extend the existing state-to-color mapping with optional style dictionaries. `color` is background fill; hatch ink and border are independent. String colors retain legacy styling. Missing style fields inherit background/tile border options and the default `//` hatch. Empty hatch disables hatching, so choose a distinct fill/border if doing so. |
 | `metadata_numeric_scales={"purity": {"show_missing_marker": False, "missing_color": "#EEEEEE", "colorbar": {"length": 95, "thickness": 7, "label_pad": 2}}}` | Extend the existing column-keyed numeric mapping. Marker visibility defaults to True for both numeric bars and heatmaps; original missing values remain missing. Colorbar sizes and label spacing are in typographic points, positive sizes/nonnegative spacing. Length/thickness apply to horizontal and vertical metadata colorbars. Omitted sizing uses historical defaults. |
 | `legend_title_overrides={"cohort_arm": "Study\narm", "purity": "Tumor\npurity"}` | Existing source-column-keyed mapping supports multiline track labels and legend titles; no renamed input columns are necessary. |
-| `tmb_height_ratio=.07, metadata_height_ratio=.14` | Existing ratios now scale Matplotlib historical panel weights relative to the main matrix, anchored at defaults `.14` and `.18`. Halving either halves that panel height relative to the main matrix; defaults retain historical geometry. Track heights/spacing still determine internal proportions. |
+| `tmb_height_ratio=.07, metadata_height_ratio=.14` | Existing ratios now scale Matplotlib historical panel weights relative to the main matrix, anchored at defaults `.14` and `.18`. Halving either halves the requested weight relative to the main matrix; compact mode may enlarge panels to fit measured labels, ticks and gaps. Noncompact defaults retain historical geometry. Track heights/spacing still determine internal proportions. |
 
 Compact layout measures complete categorical legends and numeric colorbars,
 including ticks and multiline labels, and shares a row when space permits.
@@ -97,3 +97,12 @@ Plotly explicitly rejects state style dictionaries and nondefault gene-bar color
 gene-bar axis label, and numeric scale extensions; ordinary string state colors,
 summary heading overrides, metadata display labels, and existing ratios remain
 supported. No new dependencies are required.
+
+## Matrix-aligned compact layout (issue 7)
+
+The complete standalone [compact example](compact_alignment.py) adds counted
+legend display strings, a numeric colorbar title independent of categorical
+headings, explicit multiline marginal labels and a 4.33-inch figure. See
+[compact options](../options-reference.md#compact-alignment-and-short-figures-matplotlib)
+for automatic measured spacing, sizing limits and backend scope. No returned
+axes need editing; source categories and external-cohort provenance stay intact.

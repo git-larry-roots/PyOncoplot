@@ -1225,7 +1225,7 @@ def _add_numeric_metadata_colorbar(
     if "label_pad" in sizing:
         colorbar.ax.xaxis.labelpad = sizing["label_pad"]
         colorbar.ax.yaxis.labelpad = sizing["label_pad"]
-    if options.show_legend_titles:
+    if scale.get("show_title", options.show_legend_titles):
         if orientation == "horizontal":
             colorbar.set_label(_truncate_text(legend.title, options.legend_title_max_chars), fontsize=title_fontsize, labelpad=sizing.get("label_pad", 4))
         else:
@@ -1488,10 +1488,11 @@ def _add_static_legends(
             break
 
 
-def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends, options):
+def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends, options, band):
     """Pack full legends using rendered extents, never truncating metadata levels.
 
-    Return the occupied bottom band in figure coordinates. Explicit legend offsets
+    Pack inside band=(matrix left, matrix right), in figure coordinates.
+    Return the occupied bottom band top. Explicit legend offsets
     belong to the legacy/manual layout and are rejected for this automatic mode.
     """
     if options.legend_offsets:
@@ -1517,8 +1518,11 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
                        options.metadata_legend_key_size)
                       for legend in metadata_legends if not legend.is_numeric)
         numeric = [legend for legend in metadata_legends if legend.is_numeric]
-    cursor_x, cursor_y, row_height = .03, .02, 0.0
-    gap = 6 / 72 / figure.get_figheight()
+    left, right = band
+    available = right - left
+    cursor_x, cursor_y, row_height = left, .02, 0.0
+    gap = options.legend_gap_points / 72 / figure.get_figheight()
+    horizontal_gap = options.legend_gap_points / 72 / figure.get_figwidth()
     for handles, title, size, title_size, key_size in groups:
         if not handles:
             continue
@@ -1531,17 +1535,17 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
                                    handlelength=key_size, handleheight=key_size, columnspacing=1)
             figure.canvas.draw()
             bbox = legend.get_window_extent().transformed(figure.transFigure.inverted())
-            if bbox.width <= .94 or ncol == 1:
+            if bbox.width <= available or ncol == 1:
                 break
             legend.remove()
             ncol -= 1
-        if bbox.width > .94:
+        if bbox.width > available:
             raise ValueError("Legend labels exceed figure width; increase width or reduce legend font size.")
-        if cursor_x + bbox.width > .97:
+        if cursor_x + bbox.width > right + 1e-10:
             cursor_y += row_height + gap
-            cursor_x, row_height = .03, 0.0
+            cursor_x, row_height = left, 0.0
         legend.set_bbox_to_anchor((cursor_x, cursor_y), transform=figure.transFigure)
-        cursor_x += bbox.width + .025
+        cursor_x += bbox.width + horizontal_gap
         row_height = max(row_height, bbox.height)
     # Numeric bars join the same shelf as categorical groups when their full
     # rendered extent (including long ticks and multiline titles) fits.
@@ -1552,15 +1556,15 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         ax = figure.axes[-1]
         figure.canvas.draw()
         bbox = ax.get_tightbbox(figure.canvas.get_renderer()).transformed(figure.transFigure.inverted())
-        if bbox.width > .94:
+        if bbox.width > available:
             raise ValueError("Colorbar labels exceed figure width; increase width or reduce colorbar length/fonts.")
-        if cursor_x + bbox.width > .97:
+        if cursor_x + bbox.width > right + 1e-10:
             cursor_y += row_height + gap
-            cursor_x, row_height = .03, 0.0
+            cursor_x, row_height = left, 0.0
         pos = ax.get_position()
         ax.set_position([pos.x0 + cursor_x - bbox.x0, pos.y0 + cursor_y - bbox.y0,
                          pos.width, pos.height])
-        cursor_x += bbox.width + .025
+        cursor_x += bbox.width + horizontal_gap
         row_height = max(row_height, bbox.height)
     return cursor_y + row_height + (gap if row_height else 0)
 
@@ -1572,7 +1576,7 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
     position = sample_axis.get_position()
     bbox = sample_axis.get_tightbbox(renderer).transformed(figure.transFigure.inverted())
     sample_depth = max(0, position.y0 - bbox.y0)
-    bottom = legend_top + sample_depth + 8 / 72 / figure.get_figheight()
+    bottom = legend_top + sample_depth + options.legend_gap_points / 72 / figure.get_figheight()
     top = .95
     if figure._suptitle is not None:
         title_bbox = figure._suptitle.get_window_extent(renderer).transformed(figure.transFigure.inverted())
@@ -1591,6 +1595,65 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
                 break
             ax.set_xlim(0, ax.get_xlim()[1] * (1 + (right - ax.bbox.x1 + 4) / ax.bbox.width))
 
+    if "tmb" in axes:
+        ax = axes["tmb"]
+        # MultipleLocator includes out-of-range ticks; they must not influence
+        # compact label measurement or collide with the first gene label.
+        low, high = ax.get_ylim()
+        if options.tmb_tick_interval is not None:
+            ax.set_yticks([t for t in ax.get_yticks() if low <= t <= high])
+        grid = ax.get_subplotspec().get_gridspec()
+        index = ax.get_subplotspec().rowspan.start
+        for _ in range(4):
+            figure.canvas.draw()
+            needed = ax.yaxis.label.get_window_extent(renderer).height + 4 if ax.yaxis.label.get_text() else 0
+            ticks = [t.get_window_extent(renderer) for t in ax.get_yticklabels() if t.get_visible()]
+            needed = max(needed, sum(b.height for b in ticks) + 2 * max(0, len(ticks)-1))
+            if ax.bbox.height >= needed:
+                break
+            weights = list(grid.get_height_ratios())
+            weights[index] *= needed / ax.bbox.height * 1.03
+            grid.set_height_ratios(weights)
+            figure.subplots_adjust()
+
+    # Multiline metadata row labels need physical text space even when their
+    # requested track weights are tiny. Grow only the metadata panel weight,
+    # preserving sample alignment and leaving observed data untouched.
+    if "metadata" in axes:
+        ax = axes["metadata"]
+        grid = ax.get_subplotspec().get_gridspec()
+        index = ax.get_subplotspec().rowspan.start
+        for _ in range(4):
+            figure.canvas.draw()
+            labels = ax.get_yticklabels()
+            centers = [t.get_window_extent(renderer).y0 + t.get_window_extent(renderer).height / 2 for t in labels]
+            needed = max((
+                (a.get_window_extent(renderer).height + b.get_window_extent(renderer).height) / 2 + 2
+                for a, b in zip(labels, labels[1:])
+            ), default=0)
+            actual = min((abs(a-b) for a, b in zip(centers, centers[1:])), default=needed)
+            if actual >= needed or actual <= 0:
+                break
+            weights = list(grid.get_height_ratios())
+            weights[index] *= needed / actual * 1.03
+            grid.set_height_ratios(weights)
+            figure.subplots_adjust()
+
+    # Adjacent panels can have labels extending beyond their axes even with
+    # zero requested buffer. Reserve only the measured missing clearance.
+    panel_axes = sorted((ax for name, ax in axes.items() if name != "gene_bar"),
+                        key=lambda ax: ax.get_position().y0, reverse=True)
+    for _ in range(4):
+        figure.canvas.draw()
+        missing = max((
+            lower.get_tightbbox(renderer).y1 - upper.get_tightbbox(renderer).y0 + 2
+            for upper, lower in zip(panel_axes, panel_axes[1:])
+        ), default=0)
+        if missing <= 0:
+            break
+        average = sum(ax.bbox.height for ax in panel_axes) / len(panel_axes)
+        figure.subplots_adjust(hspace=figure.subplotpars.hspace + missing / average * 1.1)
+
     figure.canvas.draw()
     renderer = figure.canvas.get_renderer()
     decorations = [legend.get_window_extent(renderer) for legend in figure.legends]
@@ -1602,6 +1665,16 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
     clipped = any(b.x0 < 0 or b.y0 < 0 or b.x1 > figure.bbox.x1 or b.y1 > figure.bbox.y1 for b in boxes)
     overlap = any(a.overlaps(b) for i, a in enumerate(decorations) for b in decorations[i + 1:] + sample_labels)
     overlap = overlap or any(a.overlaps(b) for a, b in zip(sample_labels, sample_labels[1:]))
+    # A short matrix must still fit its row labels. Include marginal labels,
+    # ticks and subplot headings so impossible fonts/height fail descriptively.
+    text_boxes = []
+    for ax in axes.values():
+        xticks = [t for value, t in zip(ax.get_xticks(), ax.get_xticklabels()) if min(ax.get_xlim()) <= value <= max(ax.get_xlim())]
+        yticks = [t for value, t in zip(ax.get_yticks(), ax.get_yticklabels()) if min(ax.get_ylim()) <= value <= max(ax.get_ylim())]
+        texts = [ax.xaxis.label, ax.yaxis.label, ax.title] + xticks + yticks + list(ax.texts)
+        text_boxes.extend(t.get_window_extent(renderer) for t in texts if t.get_visible() and t.get_text())
+    clipped = clipped or any(b.x0 < 0 or b.y0 < 0 or b.x1 > figure.bbox.x1 or b.y1 > figure.bbox.y1 for b in text_boxes)
+    overlap = overlap or any(a.overlaps(b) for i, a in enumerate(text_boxes) for b in text_boxes[i + 1:])
     if clipped or overlap:
         raise ValueError("Compact legends/sample labels overlap or exceed the canvas; increase width/height or reduce fonts.")
 
@@ -1665,7 +1738,7 @@ def render_matplotlib_oncoplot(
             for name, weight in rows]
 
     fig_width = max(8, options.width / 120)
-    fig_height = max(5, options.height / 120)
+    fig_height = options.height / 120 if options.compact_layout else max(5, options.height / 120)
     figure = plt.figure(figsize=(fig_width, fig_height), constrained_layout=False)
     ncols = 2 if draw_gene_bar else 1
     width_ratios = [1 - options.gene_bar_width_ratio, options.gene_bar_width_ratio] if draw_gene_bar else [1]
@@ -1773,7 +1846,16 @@ def render_matplotlib_oncoplot(
     if options.compact_layout:
         if variant_value_legends:
             raise NotImplementedError("compact_layout currently supports categorical main grids, not variant-value colorbars.")
-        legend_top = _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends, options)
+        # Pack against final matrix bounds, never the default GridSpec position.
+        figure.subplots_adjust(
+            left=_left_margin_for_metadata(prepared, options, draw_metadata=draw_metadata, fig_width=fig_width),
+            right=.98,
+        )
+        main_position = axes["main"].get_position()
+        legend_top = _add_compact_legends(
+            figure, mutation_handles, tmb_handles, metadata_legends, options,
+            (main_position.x0, main_position.x1),
+        )
     else:
         _add_static_legends(
             figure,
@@ -1823,6 +1905,12 @@ def render_matplotlib_oncoplot(
             has_bottom_legend=has_bottom_mutation_legend,
             has_bottom_metadata_legend=has_bottom_metadata_legend,
         )
+    # Preserve explicit newlines without automatic wrapping.
+    for ax in axes.values():
+        for text in (ax.xaxis.label, ax.yaxis.label, ax.title):
+            text.set_wrap(False)
+    if figure._suptitle is not None:
+        figure._suptitle.set_wrap(False)
     if options.compact_layout:
         _finish_compact_layout(figure, axes, sample_axis, legend_top, options)
     elif options.title_text is not None:
