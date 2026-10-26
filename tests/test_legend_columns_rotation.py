@@ -117,5 +117,5 @@ def test_direct_renderers_and_defaults(compact, angle):
         render_plotly_oncoplot(prepared, palette={}, options={"tmb_y_label_angle":angle})
     assert OncoplotOptions().tmb_y_label_angle is None
     names = tuple(f.name for f in fields(OncoplotOptions))
-    assert names[105:] == ("gene_bar_label_position", "tmb_y_label_angle")
+    assert names[105:107] == ("gene_bar_label_position", "tmb_y_label_angle")
     plt.close("all")

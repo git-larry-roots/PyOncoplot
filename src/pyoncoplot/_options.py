@@ -146,7 +146,21 @@ class OncoplotOptions:
 
     tmb_y_label_angle: Optional[float] = None
 
+    metadata_legend_order: Optional[Sequence[str]] = None
+    metadata_legend_alignment: Mapping[str, Literal["top", "center"]] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
+        if self.metadata_legend_order is not None:
+            order = self.metadata_legend_order
+            if (isinstance(order, (str, bytes)) or not isinstance(order, Sequence)
+                    or any(not isinstance(key, str) for key in order)):
+                raise ValueError("metadata_legend_order must be a sequence of original metadata column names.")
+            if len(set(order)) != len(order):
+                raise ValueError("metadata_legend_order must not contain duplicate columns.")
+        if (not isinstance(self.metadata_legend_alignment, Mapping)
+                or any(not isinstance(key, str) or value not in ("top", "center")
+                       for key, value in self.metadata_legend_alignment.items())):
+            raise ValueError("metadata_legend_alignment must map original metadata column names to 'top' or 'center'.")
         if self.tmb_y_label_angle is not None and (
             isinstance(self.tmb_y_label_angle, bool)
             or not isinstance(self.tmb_y_label_angle, (int, float))
@@ -332,9 +346,9 @@ def coerce_options(options: Optional[OncoplotOptions | Mapping[str, Any]]) -> On
 
 def validate_metadata_legend_columns(options: OncoplotOptions, columns: Sequence[str]) -> None:
     """Validate source names even when legends are hidden or the backend rejects mappings."""
-    for name in ("metadata_legend_ncol", "metadata_legend_nrow"):
+    for name in ("metadata_legend_ncol", "metadata_legend_nrow", "metadata_legend_alignment", "metadata_legend_order"):
         value = getattr(options, name)
-        if isinstance(value, Mapping):
+        if isinstance(value, Mapping) or (name == "metadata_legend_order" and value is not None):
             unknown = set(value) - set(columns)
             if unknown:
                 raise ValueError(f"{name} references unknown metadata columns: {sorted(unknown)}")

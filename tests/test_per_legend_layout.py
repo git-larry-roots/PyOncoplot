@@ -140,7 +140,7 @@ def test_positional_prefix_is_fixed_not_git_dependent():
     assert names[:8] == ("width", "height", "selection_type", "tmb_height_ratio", "gene_bar_width_ratio",
                          "metadata_height_ratio", "metadata_position", "buffer_metadata")
     assert names[25:27] == ("metadata_legend_nrow", "metadata_legend_ncol")
-    assert names[105:] == ("gene_bar_label_position", "tmb_y_label_angle")
+    assert names[105:107] == ("gene_bar_label_position", "tmb_y_label_angle")
 
 
 @pytest.mark.parametrize("payload,match", [
@@ -155,4 +155,24 @@ def test_invalid_yaml_options(tmp_path, payload, match):
     with pytest.raises(ValueError, match=match):
         options = load_oncoplot_params(path)["options"]
         example.publication_example(overrides=options)
+    plt.close("all")
+
+
+def test_independent_display_layout_preserves_external_summaries_and_states():
+    base = example.publication_example()
+    changed = example.publication_example(overrides={
+        "metadata_legend_order": ["cohort_arm", "purity", "z_response", "a_site"],
+        "metadata_legend_alignment": {"cohort_arm": "top", "purity": "top", "z_response": "top", "a_site": "top"},
+        "legend_gap_points": 1})
+    a, b = changed.prepared_data, base.prepared_data
+    assert (a.samples, a.genes, a.total_samples, a.row_summary_external, a.metadata_cols) == (b.samples, b.genes, b.total_samples, b.row_summary_external, b.metadata_cols)
+    assert a.row_summary_external
+    for name in ("tiles", "metadata", "mutation_counts", "tmb", "row_summary", "cell_states", "main_grid_rows"):
+        assert_frame_equal(getattr(a, name), getattr(b, name))
+    for name in ("main", "metadata", "gene_bar", "tmb"):
+        old = axes_by_name(base.figure)[name]
+        new = axes_by_name(changed.figure)[name]
+        np.testing.assert_allclose([p.get_facecolor() for p in old.patches], [p.get_facecolor() for p in new.patches])
+        np.testing.assert_allclose([p.get_width() for p in old.patches], [p.get_width() for p in new.patches])
+        np.testing.assert_allclose([p.get_height() for p in old.patches], [p.get_height() for p in new.patches])
     plt.close("all")

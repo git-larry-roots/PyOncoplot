@@ -1518,16 +1518,22 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
     groups = []
     if options.show_legend and options.mutation_legend_position != "none":
         groups.extend([(mutation_handles, _legend_entry_title("Mutation Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size, None),
+                        options.font_size_legend_title or fontsize, options.legend_key_size, None, None),
                        (tmb_handles, _legend_entry_title("TMB Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size, None)])
-    numeric = []
+                        options.font_size_legend_title or fontsize, options.legend_key_size, None, None)])
     if options.show_metadata_legends:
+        metadata_legends = list(metadata_legends)
+        if options.metadata_legend_order is not None:
+            order = {key: i for i, key in enumerate(options.metadata_legend_order)}
+            # Stable fallback keeps unspecified groups in their original order.
+            metadata_legends.sort(key=lambda legend: order.get(legend.key.removeprefix("metadata:"), len(order)))
         groups.extend((legend.handles, legend.title, meta_fontsize,
                        options.font_size_metadata_legend_title or options.font_size_legend_title or meta_fontsize,
-                       options.metadata_legend_key_size, legend.key)
-                      for legend in metadata_legends if not legend.is_numeric)
-        numeric = [legend for legend in metadata_legends if legend.is_numeric]
+                       options.metadata_legend_key_size, legend.key, legend)
+                      for legend in metadata_legends)
+    if options.metadata_legend_order is None:
+        # Preserve historical categorical-first, right-anchored numeric defaults.
+        groups.sort(key=lambda group: bool(group[-1] and group[-1].is_numeric))
     left, right = band
     available = right - left
     cursor_x, row_height = left, 0.0
@@ -1535,73 +1541,65 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
     shelf_heights = []
     gap = options.legend_gap_points / 72 / figure.get_figheight()
     horizontal_gap = options.legend_gap_points / 72 / figure.get_figwidth()
-    for handles, title, size, title_size, key_size, source_key in groups:
-        if not handles:
-            continue
+    for handles, title, size, title_size, key_size, source_key, spec in groups:
         source = source_key.removeprefix("metadata:") if source_key is not None else None
-        columns = options.metadata_legend_ncol
-        rows = options.metadata_legend_nrow
-        columns = columns.get(source) if isinstance(columns, Mapping) else columns
-        rows = rows.get(source) if isinstance(rows, Mapping) else rows
-        explicit = source is not None and (rows is not None or columns is not None)
-        ncol = len(handles)
-        if explicit:
-            # Apply each option independently; unspecified sources stay automatic.
-            ncol = max(columns or 1, int(np.ceil(len(handles) / rows)) if rows is not None else 1)
-        while True:
-            legend = figure.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, 0),
-                                   ncol=ncol, frameon=False, borderaxespad=0,
-                                   fontsize=size, title=title if options.show_legend_titles else None,
-                                   title_fontsize=title_size,
-                                   handlelength=key_size, handleheight=key_size, columnspacing=1)
+        if spec is not None and spec.is_numeric:
+            _add_numeric_metadata_colorbar(figure, spec, [.1, .15, .20, .018],
+                                          "horizontal", options, meta_fontsize,
+                                          options.font_size_metadata_legend_title or meta_fontsize)
+            artist = figure.axes[-1]
             figure.canvas.draw()
-            bbox = legend.get_window_extent().transformed(figure.transFigure.inverted())
-            if bbox.width <= available or ncol == 1 or explicit:
-                break
-            legend.remove()
-            ncol -= 1
+            bbox = artist.get_tightbbox(figure.canvas.get_renderer()).transformed(figure.transFigure.inverted())
+        else:
+            if not handles:
+                continue
+            columns = options.metadata_legend_ncol
+            rows = options.metadata_legend_nrow
+            columns = columns.get(source) if isinstance(columns, Mapping) else columns
+            rows = rows.get(source) if isinstance(rows, Mapping) else rows
+            explicit = source is not None and (rows is not None or columns is not None)
+            ncol = len(handles)
+            if explicit:
+                # Apply each option independently; unspecified sources stay automatic.
+                ncol = max(columns or 1, int(np.ceil(len(handles) / rows)) if rows is not None else 1)
+            while True:
+                legend = figure.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, 0),
+                                       ncol=ncol, frameon=False, borderaxespad=0,
+                                       fontsize=size, title=title if options.show_legend_titles else None,
+                                       title_fontsize=title_size,
+                                       handlelength=key_size, handleheight=key_size, columnspacing=1)
+                figure.canvas.draw()
+                bbox = legend.get_window_extent().transformed(figure.transFigure.inverted())
+                if bbox.width <= available or ncol == 1 or explicit:
+                    break
+                legend.remove()
+                ncol -= 1
+            artist = legend
         if bbox.width > available:
+            if spec is not None and spec.is_numeric:
+                raise ValueError("Colorbar labels exceed figure width; increase width or reduce colorbar length/fonts.")
             raise ValueError("Legend labels exceed figure width; increase width or reduce legend font size.")
         if cursor_x + bbox.width > right + 1e-10:
             shelf_heights.append(row_height)
             shelves.append([])
             cursor_x, row_height = left, 0.0
-        shelves[-1].append((legend, bbox, cursor_x))
-        cursor_x += bbox.width + horizontal_gap
-        row_height = max(row_height, bbox.height)
-    # Numeric bars join the same shelf as categorical groups when their full
-    # rendered extent (including long ticks and multiline titles) fits.
-    for legend in numeric:
-        _add_numeric_metadata_colorbar(figure, legend, [.1, .15, .20, .018],
-                                      "horizontal", options, meta_fontsize,
-                                      options.font_size_metadata_legend_title or meta_fontsize)
-        ax = figure.axes[-1]
-        figure.canvas.draw()
-        bbox = ax.get_tightbbox(figure.canvas.get_renderer()).transformed(figure.transFigure.inverted())
-        if bbox.width > available:
-            raise ValueError("Colorbar labels exceed figure width; increase width or reduce colorbar length/fonts.")
-        if cursor_x + bbox.width > right + 1e-10:
-            shelf_heights.append(row_height)
-            shelves.append([])
-            cursor_x, row_height = left, 0.0
-        shelves[-1].append((ax, bbox, cursor_x))
+        shelves[-1].append((artist, bbox, cursor_x, source))
         cursor_x += bbox.width + horizontal_gap
         row_height = max(row_height, bbox.height)
     shelf_heights.append(row_height)
-    # Wrapping must retain top-to-bottom, left-to-right caller order. Numeric
-    # colorbars form a right-hand group, retaining their own metadata order.
+    # Shelves retain explicit caller order, including interleaved colorbars.
     top = .02 + sum(shelf_heights) + gap * (len(shelves) - 1)
     y = top
     for shelf, height in zip(shelves, shelf_heights):
         y -= height
-        numeric_width = sum(box.width + horizontal_gap for artist, box, x in shelf
+        numeric_width = sum(box.width + horizontal_gap for artist, box, x, source in shelf
                             if artist in figure.axes)
         numeric_x = right - numeric_width + horizontal_gap
-        for artist, box, x in shelf:
-            aligned_y = y + (height - box.height) / 2
+        for artist, box, x, source in shelf:
+            aligned_y = y + (height - box.height) * (1 if options.metadata_legend_alignment.get(source) == "top" else .5)
             if artist in figure.axes:
                 pos = artist.get_position()
-                artist.set_position([pos.x0 + numeric_x - box.x0,
+                artist.set_position([pos.x0 + (numeric_x if options.metadata_legend_order is None else x) - box.x0,
                                      pos.y0 + aligned_y - box.y0, pos.width, pos.height])
                 numeric_x += box.width + horizontal_gap
             else:
@@ -1653,7 +1651,8 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
             index = ax.get_subplotspec().rowspan.start
             for _ in range(8 if options.tmb_y_label_angle is not None else 4):
                 figure.canvas.draw()
-                needed = ax.yaxis.label.get_window_extent(renderer).height + 4 if ax.yaxis.label.get_text() else 0
+                # Two pixels of measured clearance avoid inflating a short panel.
+                needed = ax.yaxis.label.get_window_extent(renderer).height + 2 if ax.yaxis.label.get_text() else 0
                 ticks = [(value, t.get_window_extent(renderer))
                          for value, t in zip(ax.get_yticks(), ax.get_yticklabels())
                          if t.get_visible() and low <= value <= high]
@@ -1667,7 +1666,7 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
                 if ax.bbox.height >= needed:
                     break
                 weights = list(grid.get_height_ratios())
-                weights[index] *= needed / ax.bbox.height * 1.03
+                weights[index] *= needed / ax.bbox.height * 1.005
                 grid.set_height_ratios(weights)
                 figure.subplots_adjust()
 
@@ -1765,6 +1764,8 @@ def render_matplotlib_oncoplot(
     if not options.compact_layout and any(isinstance(value, Mapping) for value in
             (options.metadata_legend_ncol, options.metadata_legend_nrow)):
         raise NotImplementedError("metadata_legend_ncol/nrow mappings require compact_layout=True.")
+    if not options.compact_layout and (options.metadata_legend_order is not None or options.metadata_legend_alignment):
+        raise NotImplementedError("metadata_legend_order/alignment require compact_layout=True.")
     draw_gene_bar = merged["draw_gene_bar"]
     draw_tmb_bar = merged["draw_tmb_bar"]
     from ._cell_states import configure_summary_rendering
