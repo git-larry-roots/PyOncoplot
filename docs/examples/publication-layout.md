@@ -100,6 +100,9 @@ supported. No new dependencies are required.
 
 ## Matrix-aligned compact layout (issue 7)
 
+The [final compact layout example](final-compact-layout.md) demonstrates ordered
+metadata legends, thinner panels and shared frequency labels.
+
 The complete standalone [compact example](compact_alignment.py) adds counted
 legend display strings, a numeric colorbar title independent of categorical
 headings, explicit multiline marginal labels and a 4.33-inch figure. See

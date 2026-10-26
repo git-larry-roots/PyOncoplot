@@ -147,6 +147,7 @@ Matplotlib/static-layout oriented.
 | `gene_bar_label_round` | `0` | rounding for recurrence labels |
 | `gene_bar_label_padding` | `0.24` | extra x-axis room for gene-bar percentage labels |
 | `gene_bar_label_nudge` | `0.0` | additional x-axis nudge for gene-bar labels |
+| `gene_bar_label_position` | `"bar_end"` | Matplotlib: existing per-bar labels, or `"column"` for a shared left-aligned column beyond the longest bar; padding/nudge still apply |
 | `gene_bar_scale_breaks` | `None` | explicit gene-bar axis tick positions |
 | `gene_bar_scale_n_breaks` | `None` | requested number of gene-bar axis breaks |
 

@@ -63,7 +63,7 @@ def test_invariance_and_ratio_defaults():
     p, q = axes_by_name(plain.figure), axes_by_name(styled.figure)
     assert q["main"].get_position().height > p["main"].get_position().height
     # Histogram weights also respect the measured multiline-label minimum.
-    assert q["tmb"].get_position().height/q["main"].get_position().height >= (
+    assert q["tmb"].get_position().height/q["main"].get_position().height + 1e-12 >= (
         .5*p["tmb"].get_position().height/p["main"].get_position().height)
     # Metadata is now subject to measured multiline-label minimums. Assert the
     # requested weight remains a lower bound and the complete labels do not overlap.
@@ -187,6 +187,6 @@ def test_multiple_numeric_colorbars_pack_without_overlap():
 def test_new_options_preserve_existing_positional_field_order():
     from dataclasses import fields
     names = [field.name for field in fields(OncoplotOptions)]
-    assert names[-3:-1] == ["gene_bar_color", "gene_bar_x_label"]
-    assert names[-1] == "legend_gap_points"
+    assert names[102:104] == ["gene_bar_color", "gene_bar_x_label"]
+    assert names[104] == "legend_gap_points"
     assert names[names.index("sample_id_padding") + 1] == "tmb_bar_color"
