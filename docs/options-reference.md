@@ -43,6 +43,7 @@ result = oncoplot(
 | `show_x_label` | `False` | show x-axis label |
 | `show_y_label` | `False` | show y-axis label |
 | `show_tmb_y_label` | `False` | show TMB y-axis label |
+| `tmb_y_label_angle` | `None` | Matplotlib histogram y-label rotation in finite degrees; `0` horizontal, `90` standard rotated; `None` preserves automatic orientation and explicit newlines |
 | `show_tmb_axis` | `True` | show TMB tick labels |
 | `show_gene_bar_axis` | `True` | show gene bar axis |
 
@@ -70,7 +71,14 @@ placed vertically on the right. Expanded main-grid variant-value colorbars are
 an exception: Plotly and Matplotlib place them horizontally below the plot area so
 they do not compete with right-side metadata legends. Matplotlib keeps separate
 static legend layout controls, including `metadata_legend_nrow` and
-`metadata_legend_ncol`.
+`metadata_legend_ncol`. In compact mode these apply to each categorical metadata
+group, not the mutation legend or numeric colorbars. Omit both for automatic
+packing. Positive integer `ncol` requests columns; `nrow` limits rows. With both,
+the effective columns are `max(ncol, ceil(entries / nrow))`, matching the legacy
+right-side layout. Entries retain Matplotlib column-major order (down, then
+right); metadata groups retain their display order across measured shelves.
+Explicit columns that cannot fit raise an error instead of silently decreasing
+the request. Numeric colorbars remain automatically packed and right-aligned.
 
 `legend_offsets` targets individual legends by stable keys. Use source columns
 where available, such as `mutation:type`, `tmb:tmb_type`, `metadata:clinical_group`,

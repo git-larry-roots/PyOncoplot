@@ -144,7 +144,15 @@ class OncoplotOptions:
 
     gene_bar_label_position: Literal["bar_end", "column"] = "bar_end"
 
+    tmb_y_label_angle: Optional[float] = None
+
     def __post_init__(self) -> None:
+        if self.tmb_y_label_angle is not None and (
+            isinstance(self.tmb_y_label_angle, bool)
+            or not isinstance(self.tmb_y_label_angle, (int, float))
+            or not math.isfinite(self.tmb_y_label_angle)
+        ):
+            raise ValueError("tmb_y_label_angle must be a finite number or None.")
         if self.gene_bar_label_position not in {"bar_end", "column"}:
             raise ValueError("gene_bar_label_position must be bar_end or column.")
         if isinstance(self.legend_gap_points, bool):
@@ -295,10 +303,12 @@ class OncoplotOptions:
             raise ValueError("gene_bar_label_round must be >= 0.")
         if self.metadata_max_levels < 1:
             raise ValueError("metadata_max_levels must be >= 1.")
-        for name in ("metadata_legend_nrow", "metadata_legend_ncol", "gene_bar_scale_n_breaks"):
+        for name in ("metadata_legend_nrow", "metadata_legend_ncol"):
             value = getattr(self, name)
-            if value is not None and value < 1:
-                raise ValueError(f"{name} must be >= 1 when supplied.")
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+                raise ValueError(f"{name} must be a positive integer when supplied.")
+        if self.gene_bar_scale_n_breaks is not None and self.gene_bar_scale_n_breaks < 1:
+            raise ValueError("gene_bar_scale_n_breaks must be >= 1 when supplied.")
         if self.gene_bar_scale_breaks is not None:
             try:
                 [float(value) for value in self.gene_bar_scale_breaks]

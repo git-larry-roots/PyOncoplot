@@ -129,7 +129,6 @@ def test_invalid_options(options):
     {"metadata_numeric_scales": {"value": {"min": 0, "max": 10, "ticks": [0, 11]}}},
     {"compact_layout": True, "legend_offsets": {"mutation": {"x": .1}}},
     {"compact_layout": True},
-    {"compact_layout": True, "metadata_legend_position": "bottom", "metadata_legend_ncol": 2},
     {"compact_layout": True, "metadata_legend_position": "bottom", "font_size_legend_text": 200},
 ])
 def test_invalid_effective_layout(options):
