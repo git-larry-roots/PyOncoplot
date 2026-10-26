@@ -107,7 +107,7 @@ def configure_summary_rendering(prepared, options, draw_gene_bar):
     """Apply the same denominator guard and source label to both entrypoints."""
     if not draw_gene_bar or prepared.row_summary is None:
         return options
-    if options.show_gene_bar_labels or options.gene_bar_mode == "percent":
+    if (options.show_gene_bar_labels and options.gene_bar_label_format != "count") or options.gene_bar_mode == "percent":
         if prepared.row_summary.Denominator.isna().any():
             raise ValueError("Percentage summaries require explicit denominators for every displayed gene.")
     if prepared.row_summary_external:
