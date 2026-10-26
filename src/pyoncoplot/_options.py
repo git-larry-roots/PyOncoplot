@@ -123,6 +123,8 @@ class OncoplotOptions:
     # Publication layout controls; lengths ending in _points are typographic points.
     compact_layout: bool = False
     sample_id_padding: float = 4.0
+    gene_bar_color: Optional[str] = None
+    gene_bar_x_label: Optional[str] = None
     tmb_bar_color: Optional[str] = None
     tmb_bar_width: float = 1.0  # sample units; spacing is 1 - width
     tmb_tick_interval: Optional[int] = None
@@ -166,8 +168,17 @@ class OncoplotOptions:
             if any(not isinstance(v, str) for v in labels.values()):
                 raise ValueError("legend overrides must map source labels to strings.")
         for column, scale in self.metadata_numeric_scales.items():
-            if not isinstance(scale, Mapping) or set(scale) - {"min", "max", "ticks", "missing_color"}:
+            if not isinstance(scale, Mapping) or set(scale) - {"min", "max", "ticks", "missing_color", "show_missing_marker", "colorbar"}:
                 raise ValueError(f"Invalid metadata_numeric_scales entry for {column!r}.")
+            if "show_missing_marker" in scale and not isinstance(scale["show_missing_marker"], bool):
+                raise ValueError("show_missing_marker must be a boolean.")
+            colorbar = scale.get("colorbar", {})
+            if not isinstance(colorbar, Mapping) or set(colorbar) - {"length", "thickness", "label_pad"}:
+                raise ValueError("colorbar accepts length, thickness, label_pad in points.")
+            for key, value in colorbar.items():
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value < 0 or (key != "label_pad" and value == 0)):
+                    raise ValueError("colorbar sizes must be finite and positive (label_pad may be zero).")
             for bound in ("min", "max"):
                 if bound in scale and (not isinstance(scale[bound], (int, float)) or not math.isfinite(scale[bound])):
                     raise ValueError("metadata scale bounds must be finite numbers.")
@@ -181,6 +192,10 @@ class OncoplotOptions:
                     raise ValueError("metadata scale ticks must be finite, strictly increasing numbers.")
         from matplotlib.colors import is_color_like
         colors = [self.tile_edgecolor, self.row_separator_color]
+        if self.gene_bar_x_label is not None and not isinstance(self.gene_bar_x_label, str):
+            raise ValueError("gene_bar_x_label must be a string or None.")
+        if self.gene_bar_color is not None:
+            colors.append(self.gene_bar_color)
         if self.tmb_bar_color is not None:
             colors.append(self.tmb_bar_color)
         colors.extend(s["missing_color"] for s in self.metadata_numeric_scales.values() if "missing_color" in s)

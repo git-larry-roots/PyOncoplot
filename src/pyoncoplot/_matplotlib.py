@@ -226,7 +226,7 @@ def _left_margin_for_metadata(
         return 0.08
 
     labels = [_legend_title(column, options) for column in prepared.metadata_cols]
-    max_label_len = max((len(label) for label in labels), default=0)
+    max_label_len = max((len(line) for label in labels for line in label.splitlines()), default=0)
     label_width_inches = max_label_len * options.font_size_metadata / 72 * 0.62
     margin = 0.04 + label_width_inches / max(fig_width, 1)
     return min(0.30, max(0.14, margin))
@@ -827,7 +827,7 @@ def _draw_main(
 
 
 def _draw_cell_states(ax, prepared, options):
-    from ._cell_states import state_grid
+    from ._cell_states import state_grid, matplotlib_state_style
     from matplotlib.patches import Rectangle
 
     grid = state_grid(prepared)
@@ -838,8 +838,18 @@ def _draw_cell_states(ax, prepared, options):
         ax.add_patch(Rectangle(
             (sample_positions[observation.Sample], observation.RowIndex),
             options.tile_width, options.tile_height,
-            facecolor=prepared.cell_state_palette[observation.State],
-            edgecolor=options.tile_edgecolor, linewidth=options.tile_linewidth, hatch="//",
+            **matplotlib_state_style(prepared, observation.State, options),
+        ))
+        # Draw the outline separately so hatch ink need not match the border.
+        value = prepared.cell_state_palette[observation.State]
+        if not isinstance(value, Mapping):
+            continue
+        style = value
+        ax.add_patch(Rectangle(
+            (sample_positions[observation.Sample], observation.RowIndex),
+            options.tile_width, options.tile_height, facecolor="none",
+            edgecolor=style.get("edgecolor", options.tile_edgecolor),
+            linewidth=style.get("linewidth", options.tile_linewidth),
         ))
 
 
@@ -869,7 +879,7 @@ def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str
         else:
             values = counts
         color = options.unspecified_mutation_color if pd.isna(mutation_type) else palette.get(str(mutation_type), options.unspecified_mutation_color)
-        ax.barh(y_positions, values, left=left, height=bar_heights, color=color)
+        ax.barh(y_positions, values, left=left, height=bar_heights, color=options.gene_bar_color or color)
         left = left + values
     if options.show_gene_bar_labels:
         totals = total_counts.to_numpy()
@@ -905,7 +915,7 @@ def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str
             axis_title += " (%)"
     if options.show_gene_bar_axis:
         ax.set_xlabel(
-            axis_title,
+            options.gene_bar_x_label if options.gene_bar_x_label is not None else axis_title,
             fontsize=options.font_size_gene_bar_axis,
         )
         if options.gene_bar_scale_breaks is not None:
@@ -1060,15 +1070,16 @@ def _draw_metadata(
                 value = values.get(sample, np.nan)
                 if pd.isna(value):
                     ax.add_patch(Rectangle((col_index, row_index), 1, track_height, facecolor=missing_color, edgecolor="white", linewidth=0.1))
-                    ax.text(
-                        col_index + 0.5,
-                        row_index + track_height * 0.55,
-                        options.metadata_na_marker,
-                        ha="center",
-                        va="center",
-                        fontsize=options.metadata_na_marker_size,
-                        color="#333333",
-                    )
+                    if scale.get("show_missing_marker", True):
+                        ax.text(
+                            col_index + 0.5,
+                            row_index + track_height * 0.55,
+                            options.metadata_na_marker,
+                            ha="center",
+                            va="center",
+                            fontsize=options.metadata_na_marker_size,
+                            color="#333333",
+                        )
                     continue
                 frac = np.clip((float(value) - min_value) / span, 0, 1)
                 color = sample_numeric_metadata_colormap(numeric_color_spec, value, min_value, max_value, column)
@@ -1120,7 +1131,7 @@ def _draw_metadata(
                 else:
                     color = sample_numeric_metadata_colormap(numeric_color_spec, value, min_value, max_value, column)
                 ax.add_patch(Rectangle((col_index, row_index), 1, track_height, facecolor=color, edgecolor="white", linewidth=0.1))
-                if pd.isna(value):
+                if pd.isna(value) and scale.get("show_missing_marker", True):
                     ax.text(
                         col_index + 0.5,
                         row_index + track_height * 0.55,
@@ -1196,6 +1207,12 @@ def _add_numeric_metadata_colorbar(
     if "ticks" in scale:
         tick_values = list(scale["ticks"])
         tick_labels = [f"{v:g}" for v in tick_values]
+    sizing = scale.get("colorbar", {})
+    bounds = list(bounds)
+    length_axis, thickness_axis = (2, 3) if orientation == "horizontal" else (3, 2)
+    for key, index in (("length", length_axis), ("thickness", thickness_axis)):
+        if key in sizing:
+            bounds[index] = sizing[key] / 72 / (figure.get_figwidth() if index == 2 else figure.get_figheight())
     cax = figure.add_axes(_offset_bounds(bounds, options, legend.key))
     mappable = ScalarMappable(norm=Normalize(vmin=cmin, vmax=cmax), cmap=legend.colormap)
     mappable.set_array([])
@@ -1205,14 +1222,17 @@ def _add_numeric_metadata_colorbar(
     else:
         colorbar.ax.set_yticklabels(tick_labels)
     colorbar.ax.tick_params(labelsize=fontsize)
+    if "label_pad" in sizing:
+        colorbar.ax.xaxis.labelpad = sizing["label_pad"]
+        colorbar.ax.yaxis.labelpad = sizing["label_pad"]
     if options.show_legend_titles:
         if orientation == "horizontal":
-            colorbar.set_label(_truncate_text(legend.title, options.legend_title_max_chars), fontsize=title_fontsize)
+            colorbar.set_label(_truncate_text(legend.title, options.legend_title_max_chars), fontsize=title_fontsize, labelpad=sizing.get("label_pad", 4))
         else:
             colorbar.ax.set_title(
                 _truncate_text(legend.title, options.legend_title_max_chars),
                 fontsize=title_fontsize,
-                pad=max(2, title_fontsize * 0.35),
+                pad=sizing.get("label_pad", max(2, title_fontsize * 0.35)),
             )
 
 
@@ -1523,23 +1543,26 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         legend.set_bbox_to_anchor((cursor_x, cursor_y), transform=figure.transFigure)
         cursor_x += bbox.width + .025
         row_height = max(row_height, bbox.height)
-    cursor_y += row_height + (gap if row_height else 0)
-    # Colorbars get their own measured band; ticks and titles are included.
-    for start in range(0, len(numeric), 3):
-        row = numeric[start:start + 3]
-        upper = cursor_y
-        for index, legend in enumerate(row):
-            _add_numeric_metadata_colorbar(figure, legend, [.12 + index * .29, cursor_y + .08, .20, .018],
-                                          "horizontal", options, meta_fontsize,
-                                          options.font_size_metadata_legend_title or meta_fontsize)
-            ax = figure.axes[-1]
-            figure.canvas.draw()
-            bbox = ax.get_tightbbox(figure.canvas.get_renderer()).transformed(figure.transFigure.inverted())
-            pos = ax.get_position()
-            ax.set_position([pos.x0, pos.y0 + cursor_y - bbox.y0, pos.width, pos.height])
-            upper = max(upper, cursor_y + bbox.height)
-        cursor_y = upper + gap
-    return cursor_y
+    # Numeric bars join the same shelf as categorical groups when their full
+    # rendered extent (including long ticks and multiline titles) fits.
+    for legend in numeric:
+        _add_numeric_metadata_colorbar(figure, legend, [.1, .15, .20, .018],
+                                      "horizontal", options, meta_fontsize,
+                                      options.font_size_metadata_legend_title or meta_fontsize)
+        ax = figure.axes[-1]
+        figure.canvas.draw()
+        bbox = ax.get_tightbbox(figure.canvas.get_renderer()).transformed(figure.transFigure.inverted())
+        if bbox.width > .94:
+            raise ValueError("Colorbar labels exceed figure width; increase width or reduce colorbar length/fonts.")
+        if cursor_x + bbox.width > .97:
+            cursor_y += row_height + gap
+            cursor_x, row_height = .03, 0.0
+        pos = ax.get_position()
+        ax.set_position([pos.x0 + cursor_x - bbox.x0, pos.y0 + cursor_y - bbox.y0,
+                         pos.width, pos.height])
+        cursor_x += bbox.width + .025
+        row_height = max(row_height, bbox.height)
+    return cursor_y + row_height + (gap if row_height else 0)
 
 
 def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
@@ -1627,7 +1650,7 @@ def render_matplotlib_oncoplot(
     if options.metadata_position == "top" and draw_metadata:
         rows.append(("metadata", sum(options.metadata_track_heights.get(str(c), 1.0) for c in prepared.metadata_cols or []) + options.metadata_track_spacing * max(0, len(prepared.metadata_cols or []) - 1)))
     if draw_tmb_bar:
-        rows.append(("tmb", 1.2))
+        rows.append(("tmb", 1.2 * (options.tmb_height_ratio / .14)))
     main_row_count = (
         len(prepared.main_grid_rows)
         if _has_expanded_main_grid(prepared) and prepared.main_grid_rows is not None
@@ -1636,6 +1659,10 @@ def render_matplotlib_oncoplot(
     rows.append(("main", max(3, main_row_count * 0.55)))
     if options.metadata_position == "bottom" and draw_metadata:
         rows.append(("metadata", sum(options.metadata_track_heights.get(str(c), 1.0) for c in prepared.metadata_cols or []) + options.metadata_track_spacing * max(0, len(prepared.metadata_cols or []) - 1)))
+
+    # Scale historical panel weights, preserving defaults exactly.
+    rows = [(name, weight * (options.metadata_height_ratio / .18) if name == "metadata" else weight)
+            for name, weight in rows]
 
     fig_width = max(8, options.width / 120)
     fig_height = max(5, options.height / 120)
@@ -1713,8 +1740,9 @@ def render_matplotlib_oncoplot(
             for name in _mutation_levels(prepared, palette)
         ]
     if options.show_legend and options.mutation_legend_position != "none" and prepared.cell_states is not None:
+        from ._cell_states import matplotlib_state_style
         mutation_handles.extend(
-            Patch(facecolor=prepared.cell_state_palette[state], hatch="//", label=options.legend_label_overrides.get(f"Cell state: {state}", f"Cell state: {state}"))
+            Patch(**matplotlib_state_style(prepared, state, options), label=options.legend_label_overrides.get(f"Cell state: {state}", f"Cell state: {state}"))
             for state in pd.unique(prepared.cell_states.State)
         )
     has_bottom_mutation_legend = bool((mutation_handles or tmb_handles) and options.mutation_legend_position == "bottom")
