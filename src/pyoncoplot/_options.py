@@ -139,12 +139,17 @@ class OncoplotOptions:
     gene_bar_color: Optional[str] = None
     gene_bar_x_label: Optional[str] = None
 
+    # Automatic compact spacing; append to preserve positional compatibility.
+    legend_gap_points: float = 6.0
+
     def __post_init__(self) -> None:
+        if isinstance(self.legend_gap_points, bool):
+            raise ValueError("legend_gap_points must be a finite nonnegative number.")
         if not isinstance(self.compact_layout, bool):
             raise ValueError("compact_layout must be a boolean.")
         if self.tmb_y_label is not None and not isinstance(self.tmb_y_label, str):
             raise ValueError("tmb_y_label must be a string or None.")
-        for name in ("sample_id_padding", "title_gap_points", "metadata_track_spacing",
+        for name in ("sample_id_padding", "title_gap_points", "legend_gap_points", "metadata_track_spacing",
                      "tile_linewidth", "row_separator_linewidth"):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
@@ -168,10 +173,12 @@ class OncoplotOptions:
             if any(not isinstance(v, str) for v in labels.values()):
                 raise ValueError("legend overrides must map source labels to strings.")
         for column, scale in self.metadata_numeric_scales.items():
-            if not isinstance(scale, Mapping) or set(scale) - {"min", "max", "ticks", "missing_color", "show_missing_marker", "colorbar"}:
+            if not isinstance(scale, Mapping) or set(scale) - {"min", "max", "ticks", "missing_color", "show_missing_marker", "colorbar", "show_title"}:
                 raise ValueError(f"Invalid metadata_numeric_scales entry for {column!r}.")
             if "show_missing_marker" in scale and not isinstance(scale["show_missing_marker"], bool):
                 raise ValueError("show_missing_marker must be a boolean.")
+            if "show_title" in scale and not isinstance(scale["show_title"], bool):
+                raise ValueError("metadata numeric show_title must be a boolean.")
             colorbar = scale.get("colorbar", {})
             if not isinstance(colorbar, Mapping) or set(colorbar) - {"length", "thickness", "label_pad"}:
                 raise ValueError("colorbar accepts length, thickness, label_pad in points.")

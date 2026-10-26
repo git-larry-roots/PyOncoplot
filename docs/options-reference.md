@@ -234,3 +234,44 @@ and [the detailed option table](examples/publication-layout.md#publication-refin
 for `gene_bar_color`, `gene_bar_x_label`, extended `cell_state_palette` styles,
 column-keyed `metadata_numeric_scales` marker/colorbar settings, multiline
 `legend_title_overrides`, and Matplotlib panel-ratio semantics.
+
+### Compact alignment and short figures (Matplotlib)
+
+With compact_layout=True, bottom legends pack within the **main matrix's
+horizontal bounds**, excluding gene labels and the right summary panel. Full
+rendered legend/colorbar extents determine wrapping; labels are not truncated.
+legend_gap_points (default 6) controls automatic shelf gaps and the gap above
+the legend band. Reduce sample_id_padding (points) separately to bring sample
+IDs closer to the last metadata track. Existing buffer_metadata and buffer_tmb
+control inter-panel spacing; metadata_track_spacing is in track units.
+Tiny histogram/metadata panel weights and inter-panel gaps grow automatically
+when measured labels or ticks need more space. Compact panel ratios are requests subject to readable text minimums.
+
+Compact mode honors height / 120 inches without the legacy five-inch minimum:
+height=480 produces a four-inch figure. Width retains its legacy eight-inch
+minimum. Smaller tmb_height_ratio and metadata_height_ratio allow compact panels
+without shrinking fonts. Noncompact dimensions/defaults are unchanged. Impossible
+legend labels/fonts/width or height raise sizing errors rather than silently
+clipping. No universal fit exists for arbitrary text: long marginal labels and
+subplot titles may require a larger canvas or explicit newlines. Marginal labels
+and plot/subplot titles preserve explicit newlines without automatic wrapping.
+
+metadata_numeric_scales={"purity": {"show_title": True}} keeps that numeric
+colorbar title visible with show_legend_titles=False. Omit show_title to inherit
+the global switch, or set False to hide only that numeric title. Text still comes
+from legend_title_overrides. These controls (including nondefault
+legend_gap_points) are Matplotlib-only and raise explicit Plotly errors.
+
+Use existing source-keyed display mappings for counts, e.g.
+legend_label_overrides={"A": "A (n=3)"}. Count populations are chosen by the caller,
+not inferred: event counts, affected samples, metadata category counts and
+external summary denominators differ. Overrides never modify scientific data.
+
+Run PYTHONPATH=src .venv/bin/python docs/examples/compact_alignment.py.
+PNG/PDF/SVG are written to .venv/issue-7-compact/. The example combines external
+summaries, gray hatch states, count display labels, multiline marginal labels,
+hidden categorical headings and a visible numeric title in a short aligned
+figure (height=520, approximately 4.33 inches). The external cohort has 20 subjects, not the 12 shown samples. Zero
+recorded events and unresolved states are not confirmed biological negatives.
+Original-canvas geometry and exports are tested, not every PDF/SVG viewer or
+physical printer.
