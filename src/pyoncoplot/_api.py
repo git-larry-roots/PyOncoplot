@@ -19,6 +19,11 @@ from ._result import OncoplotResult
 
 
 ONCOPLOT_PARAM_KEYS = {
+    "row_summaries",
+    "gene_denominators",
+    "cell_state_palette",
+    "cell_states",
+    "preserve_empty_genes",
     "data",
     "gene_col",
     "sample_col",
@@ -73,6 +78,11 @@ ONCOPLOT_PARAM_KEYS = {
 }
 
 ONCOPLOT_DEFAULTS: dict[str, Any] = {
+    "row_summaries": None,
+    "gene_denominators": None,
+    "cell_state_palette": None,
+    "cell_states": None,
+    "preserve_empty_genes": False,
     "mutation_type_col": None,
     "tooltip_col": None,
     "include_genes": None,
@@ -252,6 +262,11 @@ def oncoplot(
         sample_col=merged["sample_col"],
         mutation_type_col=merged["mutation_type_col"],
         tooltip_col=merged["tooltip_col"],
+        preserve_empty_genes=merged["preserve_empty_genes"],
+        cell_states=merged["cell_states"],
+        cell_state_palette=merged["cell_state_palette"],
+        gene_denominators=merged["gene_denominators"],
+        row_summaries=merged["row_summaries"],
         include_genes=merged["include_genes"],
         ignore_genes=merged["ignore_genes"],
         top_n=merged["top_n"],
