@@ -17,7 +17,7 @@ from ._metadata_colors import (
     numeric_metadata_colormap_spec,
     sample_numeric_metadata_colormap,
 )
-from ._options import OncoplotOptions, coerce_options
+from ._options import OncoplotOptions, coerce_options, validate_metadata_legend_columns
 from ._params import merge_params
 from ._utils import reorder_by_priority
 
@@ -1518,14 +1518,14 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
     groups = []
     if options.show_legend and options.mutation_legend_position != "none":
         groups.extend([(mutation_handles, _legend_entry_title("Mutation Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size, False),
+                        options.font_size_legend_title or fontsize, options.legend_key_size, None),
                        (tmb_handles, _legend_entry_title("TMB Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size, False)])
+                        options.font_size_legend_title or fontsize, options.legend_key_size, None)])
     numeric = []
     if options.show_metadata_legends:
         groups.extend((legend.handles, legend.title, meta_fontsize,
                        options.font_size_metadata_legend_title or options.font_size_legend_title or meta_fontsize,
-                       options.metadata_legend_key_size, True)
+                       options.metadata_legend_key_size, legend.key)
                       for legend in metadata_legends if not legend.is_numeric)
         numeric = [legend for legend in metadata_legends if legend.is_numeric]
     left, right = band
@@ -1535,17 +1535,19 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
     shelf_heights = []
     gap = options.legend_gap_points / 72 / figure.get_figheight()
     horizontal_gap = options.legend_gap_points / 72 / figure.get_figwidth()
-    for handles, title, size, title_size, key_size, is_metadata in groups:
+    for handles, title, size, title_size, key_size, source_key in groups:
         if not handles:
             continue
-        explicit = is_metadata and (options.metadata_legend_nrow is not None or options.metadata_legend_ncol is not None)
+        source = source_key.removeprefix("metadata:") if source_key is not None else None
+        columns = options.metadata_legend_ncol
+        rows = options.metadata_legend_nrow
+        columns = columns.get(source) if isinstance(columns, Mapping) else columns
+        rows = rows.get(source) if isinstance(rows, Mapping) else rows
+        explicit = source is not None and (rows is not None or columns is not None)
         ncol = len(handles)
         if explicit:
-            # Match legacy constraints: nrow caps rows, ncol requests columns;
-            # when both are given, the row limit may require more columns.
-            ncol = options.metadata_legend_ncol or 1
-            if options.metadata_legend_nrow is not None:
-                ncol = max(ncol, int(np.ceil(len(handles) / options.metadata_legend_nrow)))
+            # Apply each option independently; unspecified sources stay automatic.
+            ncol = max(columns or 1, int(np.ceil(len(handles) / rows)) if rows is not None else 1)
         while True:
             legend = figure.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, 0),
                                    ncol=ncol, frameon=False, borderaxespad=0,
@@ -1652,8 +1654,16 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
             for _ in range(8 if options.tmb_y_label_angle is not None else 4):
                 figure.canvas.draw()
                 needed = ax.yaxis.label.get_window_extent(renderer).height + 4 if ax.yaxis.label.get_text() else 0
-                ticks = [t.get_window_extent(renderer) for t in ax.get_yticklabels() if t.get_visible()]
-                needed = max(needed, sum(b.height for b in ticks) + 2 * max(0, len(ticks)-1))
+                ticks = [(value, t.get_window_extent(renderer))
+                         for value, t in zip(ax.get_yticks(), ax.get_yticklabels())
+                         if t.get_visible() and low <= value <= high]
+                # Tick labels are centered on their data positions, not stacked
+                # inside the panel. Fit adjacent pairs at their actual spacing;
+                # summing all heights unnecessarily inflates short histograms.
+                for (a, box_a), (b, box_b) in zip(ticks, ticks[1:]):
+                    if a != b:
+                        needed = max(needed, ((box_a.height + box_b.height) / 2 + 2)
+                                     * (high - low) / abs(b - a))
                 if ax.bbox.height >= needed:
                     break
                 weights = list(grid.get_height_ratios())
@@ -1751,6 +1761,10 @@ def render_matplotlib_oncoplot(
     metadata_palette = merged["metadata_palette"]
     variant_value_palette = merged["variant_value_palette"]
     options = coerce_options(merged["options"])
+    validate_metadata_legend_columns(options, prepared.metadata_cols or [])
+    if not options.compact_layout and any(isinstance(value, Mapping) for value in
+            (options.metadata_legend_ncol, options.metadata_legend_nrow)):
+        raise NotImplementedError("metadata_legend_ncol/nrow mappings require compact_layout=True.")
     draw_gene_bar = merged["draw_gene_bar"]
     draw_tmb_bar = merged["draw_tmb_bar"]
     from ._cell_states import configure_summary_rendering

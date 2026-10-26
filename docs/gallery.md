@@ -142,3 +142,8 @@ comparison sheets.
 The [publication layout example](examples/publication-layout.md) combines aligned
 marginal bars, bottom categorical/numeric metadata, unresolved and empty rows,
 compact legends, and PNG/PDF/SVG exports without editing returned axes.
+
+
+The [per-legend layout example](examples/per-legend-layout.md) adds independent
+source-column legend constraints, a short rotated multiline histogram label,
+and thin readable metadata tracks.
