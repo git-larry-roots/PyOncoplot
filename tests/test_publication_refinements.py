@@ -175,3 +175,10 @@ def test_multiple_numeric_colorbars_pack_without_overlap():
     boxes = [ax.get_tightbbox(fig.canvas.get_renderer()) for ax in cb]
     assert not boxes[0].overlaps(boxes[1])
     plt.close(fig)
+
+
+def test_new_options_preserve_existing_positional_field_order():
+    from dataclasses import fields
+    names = [field.name for field in fields(OncoplotOptions)]
+    assert names[-2:] == ["gene_bar_color", "gene_bar_x_label"]
+    assert names[names.index("sample_id_padding") + 1] == "tmb_bar_color"

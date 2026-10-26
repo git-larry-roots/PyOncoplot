@@ -123,8 +123,6 @@ class OncoplotOptions:
     # Publication layout controls; lengths ending in _points are typographic points.
     compact_layout: bool = False
     sample_id_padding: float = 4.0
-    gene_bar_color: Optional[str] = None
-    gene_bar_x_label: Optional[str] = None
     tmb_bar_color: Optional[str] = None
     tmb_bar_width: float = 1.0  # sample units; spacing is 1 - width
     tmb_tick_interval: Optional[int] = None
@@ -138,6 +136,8 @@ class OncoplotOptions:
     metadata_numeric_scales: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     legend_label_overrides: Mapping[str, str] = field(default_factory=dict)
     legend_title_overrides: Mapping[str, str] = field(default_factory=dict)
+    gene_bar_color: Optional[str] = None
+    gene_bar_x_label: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.compact_layout, bool):
