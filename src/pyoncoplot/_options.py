@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from copy import deepcopy
-from numbers import Real
+from numbers import Number
 import math
 from collections.abc import Mapping
 from typing import Any, Callable, Literal, Optional, Sequence
@@ -179,7 +179,7 @@ class OncoplotOptions:
                         "legend_label_max_chars", "legend_title_max_chars"})
         for name in numeric:
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, Real)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, Number)
                                       or not math.isfinite(value)):
                 raise ValueError(f"{name} must be a finite number.")
             if name.startswith("font_size_") and value is not None and value < 0:
@@ -375,14 +375,28 @@ class OncoplotOptions:
                 raise ValueError("gene_bar_scale_breaks must be a sequence of numeric values.") from exc
 
 
+def _copy_option_value(value):
+    """Materialize arbitrary Mapping containers before copying nested values."""
+    if isinstance(value, Mapping):
+        return {deepcopy(key): _copy_option_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_option_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_copy_option_value(item) for item in value)
+    return deepcopy(value)
+
+
 def coerce_options(options: Optional[OncoplotOptions | Mapping[str, Any]]) -> OncoplotOptions:
     if options is None:
         return OncoplotOptions()
     if isinstance(options, Mapping):
-        return OncoplotOptions(**deepcopy(dict(options)))
+        return OncoplotOptions(**_copy_option_value(options))
     if not isinstance(options, OncoplotOptions):
         raise TypeError("options must be an OncoplotOptions instance, a mapping, or None.")
-    return OncoplotOptions(**deepcopy({f.name: getattr(options, f.name) for f in fields(options)}))
+    # Rendering consumes the base contract. Subclass-only state remains with the
+    # caller; never forward extra dataclass fields to the base constructor.
+    return OncoplotOptions(**{f.name: _copy_option_value(getattr(options, f.name))
+                              for f in fields(OncoplotOptions)})
 
 
 def validate_metadata_legend_columns(options: OncoplotOptions, columns: Sequence[str]) -> None:

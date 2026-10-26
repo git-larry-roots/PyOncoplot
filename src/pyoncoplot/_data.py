@@ -1401,21 +1401,6 @@ def prepare_oncoplot_data(
     if metadata is None and metadata_cols is not None:
         metadata = _derive_metadata_from_data(data, metadata_sample_col, metadata_cols)
     metadata = _validate_metadata(metadata, metadata_sample_col)
-    from ._metadata_filters import metadata_filter_samples
-    candidates = list(data[sample_col]) if metadata_filters else []
-    if metadata_filters and metadata is not None:
-        candidates.extend(metadata[metadata_sample_col])
-    if metadata_filters and cell_states is not None and sample_col in cell_states:
-        candidates.extend(cell_states[sample_col])
-    if metadata_filters and prepare_tmb and tmb_data is not None:
-        candidates.extend(_custom_tmb_sample_ids(tmb_data, sample_col))
-    eligible_metadata_samples = metadata_filter_samples(
-        metadata, metadata_sample_col, candidates, metadata_filters)
-    if eligible_metadata_samples is not None:
-        data = data[data[sample_col].isin(eligible_metadata_samples)].copy()
-        metadata = metadata[metadata[metadata_sample_col].isin(eligible_metadata_samples)].copy()
-        if sample_order is not None:
-            sample_order = [s for s in sample_order if str(s) in eligible_metadata_samples]
     pathway_df, _pathway_col = _validate_pathway(pathway, pathway_gene_col, gene_col)
 
     if sample_filters_active:
@@ -1474,13 +1459,34 @@ def prepare_oncoplot_data(
     states, state_palette = validate_cell_states(
         cell_states, cell_state_palette, data, gene_col, sample_col
     )
-    if eligible_metadata_samples is not None:
-        states = states[states["Sample"].isin(eligible_metadata_samples)].copy()
     if sample_filters_active:
         states = states[states["Sample"].isin(passing_sample_ids)].copy()
 
+    filter_metadata = metadata
     if metadata is not None and metadata_require_mutations:
         metadata = metadata[metadata[metadata_sample_col].isin(pd.unique(data[sample_col]))].copy()
+
+    # Match the existing pre-ranking analysis population before missing:error.
+    # Previously excluded metadata/TMB-only identifiers must not veto a cohort.
+    from ._metadata_filters import metadata_filter_samples
+    candidates = set(data[sample_col]) if metadata_filters else set()
+    if metadata_filters and metadata is not None:
+        candidates.update(metadata[metadata_sample_col])
+    if metadata_filters and prepare_tmb and tmb_data is not None:
+        custom_ids = set(_custom_tmb_sample_ids(tmb_data, sample_col))
+        if mutation_filters_active or sample_filters_active:
+            custom_ids &= candidates
+        candidates.update(custom_ids)
+    if metadata_filters:
+        candidates.update(states["Sample"])
+    eligible_metadata_samples = metadata_filter_samples(
+        filter_metadata, metadata_sample_col, sorted(candidates), metadata_filters)
+    if eligible_metadata_samples is not None:
+        data = data[data[sample_col].isin(eligible_metadata_samples)].copy()
+        metadata = metadata[metadata[metadata_sample_col].isin(eligible_metadata_samples)].copy()
+        states = states[states["Sample"].isin(eligible_metadata_samples)].copy()
+        if sample_order is not None:
+            sample_order = [s for s in sample_order if str(s) in eligible_metadata_samples]
 
     if preserve_empty_genes:
         if include_genes is None or isinstance(include_genes, (str, bytes)) or len(include_genes) == 0:
