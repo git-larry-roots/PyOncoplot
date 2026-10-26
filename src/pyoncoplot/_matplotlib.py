@@ -1004,8 +1004,12 @@ def _draw_tmb(
             axis_label = f"log10 {axis_label}"
         label = options.tmb_y_label if options.tmb_y_label is not None else axis_label
         ax.set_ylabel(label, fontsize=options.font_size_tmb_axis)
-        if options.compact_layout and "\n" in label:
-            # Explicit line breaks already make this readable horizontally.
+        angle = options.tmb_y_label_angle
+        if angle is None:
+            angle = 0 if options.compact_layout and "\n" in label else 90
+        ax.yaxis.label.set_rotation(angle)
+        if angle % 360 == 0:
+            # Keep horizontal labels outside the ticks, including explicit lines.
             ax.yaxis.label.set_rotation(0)
             ax.yaxis.label.set_horizontalalignment("right")
             ax.yaxis.label.set_verticalalignment("center")
@@ -1509,21 +1513,19 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         options.show_legend and options.mutation_legend_position == "right"
     ):
         raise ValueError("compact_layout requires bottom legend positions (or hidden legends).")
-    if options.metadata_legend_nrow is not None or options.metadata_legend_ncol is not None:
-        raise ValueError("compact_layout uses automatic packing; omit metadata_legend_nrow/metadata_legend_ncol.")
     fontsize = options.font_size_legend_text or 8
     meta_fontsize = options.font_size_metadata_legend_text or fontsize
     groups = []
     if options.show_legend and options.mutation_legend_position != "none":
         groups.extend([(mutation_handles, _legend_entry_title("Mutation Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size),
+                        options.font_size_legend_title or fontsize, options.legend_key_size, False),
                        (tmb_handles, _legend_entry_title("TMB Type", options), fontsize,
-                        options.font_size_legend_title or fontsize, options.legend_key_size)])
+                        options.font_size_legend_title or fontsize, options.legend_key_size, False)])
     numeric = []
     if options.show_metadata_legends:
         groups.extend((legend.handles, legend.title, meta_fontsize,
                        options.font_size_metadata_legend_title or options.font_size_legend_title or meta_fontsize,
-                       options.metadata_legend_key_size)
+                       options.metadata_legend_key_size, True)
                       for legend in metadata_legends if not legend.is_numeric)
         numeric = [legend for legend in metadata_legends if legend.is_numeric]
     left, right = band
@@ -1533,10 +1535,17 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
     shelf_heights = []
     gap = options.legend_gap_points / 72 / figure.get_figheight()
     horizontal_gap = options.legend_gap_points / 72 / figure.get_figwidth()
-    for handles, title, size, title_size, key_size in groups:
+    for handles, title, size, title_size, key_size, is_metadata in groups:
         if not handles:
             continue
+        explicit = is_metadata and (options.metadata_legend_nrow is not None or options.metadata_legend_ncol is not None)
         ncol = len(handles)
+        if explicit:
+            # Match legacy constraints: nrow caps rows, ncol requests columns;
+            # when both are given, the row limit may require more columns.
+            ncol = options.metadata_legend_ncol or 1
+            if options.metadata_legend_nrow is not None:
+                ncol = max(ncol, int(np.ceil(len(handles) / options.metadata_legend_nrow)))
         while True:
             legend = figure.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, 0),
                                    ncol=ncol, frameon=False, borderaxespad=0,
@@ -1545,7 +1554,7 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
                                    handlelength=key_size, handleheight=key_size, columnspacing=1)
             figure.canvas.draw()
             bbox = legend.get_window_extent().transformed(figure.transFigure.inverted())
-            if bbox.width <= available or ncol == 1:
+            if bbox.width <= available or ncol == 1 or explicit:
                 break
             legend.remove()
             ncol -= 1
@@ -1632,43 +1641,49 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
         low, high = ax.get_ylim()
         if options.tmb_tick_interval is not None:
             ax.set_yticks([t for t in ax.get_yticks() if low <= t <= high])
-        grid = ax.get_subplotspec().get_gridspec()
-        index = ax.get_subplotspec().rowspan.start
-        for _ in range(4):
-            figure.canvas.draw()
-            needed = ax.yaxis.label.get_window_extent(renderer).height + 4 if ax.yaxis.label.get_text() else 0
-            ticks = [t.get_window_extent(renderer) for t in ax.get_yticklabels() if t.get_visible()]
-            needed = max(needed, sum(b.height for b in ticks) + 2 * max(0, len(ticks)-1))
-            if ax.bbox.height >= needed:
-                break
-            weights = list(grid.get_height_ratios())
-            weights[index] *= needed / ax.bbox.height * 1.03
-            grid.set_height_ratios(weights)
-            figure.subplots_adjust()
 
-    # Multiline metadata row labels need physical text space even when their
-    # requested track weights are tiny. Grow only the metadata panel weight,
-    # preserving sample alignment and leaving observed data untouched.
-    if "metadata" in axes:
-        ax = axes["metadata"]
-        grid = ax.get_subplotspec().get_gridspec()
-        index = ax.get_subplotspec().rowspan.start
-        for _ in range(4):
-            figure.canvas.draw()
-            labels = ax.get_yticklabels()
-            centers = [t.get_window_extent(renderer).y0 + t.get_window_extent(renderer).height / 2 for t in labels]
-            growth = max((
-                ((a.get_window_extent(renderer).height + b.get_window_extent(renderer).height) / 2 + 2)
-                / abs(ca - cb)
-                for a, b, ca, cb in zip(labels, labels[1:], centers, centers[1:])
-                if ca != cb
-            ), default=1)
-            if growth <= 1:
-                break
-            weights = list(grid.get_height_ratios())
-            weights[index] *= growth * 1.03
-            grid.set_height_ratios(weights)
-            figure.subplots_adjust()
+    # Explicit rotation can require more height. Iterate the shared panel
+    # minimums together, retaining the original single pass for automatic labels.
+    for _ in range(4 if options.tmb_y_label_angle is not None else 1):
+        if "tmb" in axes:
+            ax = axes["tmb"]
+            grid = ax.get_subplotspec().get_gridspec()
+            index = ax.get_subplotspec().rowspan.start
+            for _ in range(8 if options.tmb_y_label_angle is not None else 4):
+                figure.canvas.draw()
+                needed = ax.yaxis.label.get_window_extent(renderer).height + 4 if ax.yaxis.label.get_text() else 0
+                ticks = [t.get_window_extent(renderer) for t in ax.get_yticklabels() if t.get_visible()]
+                needed = max(needed, sum(b.height for b in ticks) + 2 * max(0, len(ticks)-1))
+                if ax.bbox.height >= needed:
+                    break
+                weights = list(grid.get_height_ratios())
+                weights[index] *= needed / ax.bbox.height * 1.03
+                grid.set_height_ratios(weights)
+                figure.subplots_adjust()
+
+        # Multiline metadata row labels need physical text space even when their
+        # requested track weights are tiny. Grow only the metadata panel weight,
+        # preserving sample alignment and leaving observed data untouched.
+        if "metadata" in axes:
+            ax = axes["metadata"]
+            grid = ax.get_subplotspec().get_gridspec()
+            index = ax.get_subplotspec().rowspan.start
+            for _ in range(4):
+                figure.canvas.draw()
+                labels = ax.get_yticklabels()
+                centers = [t.get_window_extent(renderer).y0 + t.get_window_extent(renderer).height / 2 for t in labels]
+                growth = max((
+                    ((a.get_window_extent(renderer).height + b.get_window_extent(renderer).height) / 2 + 2)
+                    / abs(ca - cb)
+                    for a, b, ca, cb in zip(labels, labels[1:], centers, centers[1:])
+                    if ca != cb
+                ), default=1)
+                if growth <= 1:
+                    break
+                weights = list(grid.get_height_ratios())
+                weights[index] *= growth * 1.03
+                grid.set_height_ratios(weights)
+                figure.subplots_adjust()
 
     # Adjacent panels can have labels extending beyond their axes even with
     # zero requested buffer. Reserve only the measured missing clearance.

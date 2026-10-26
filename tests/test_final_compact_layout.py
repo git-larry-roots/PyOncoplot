@@ -111,7 +111,7 @@ def test_complete_issue7_positional_prefix():
     assert len(baseline) == 105
     names = tuple(f.name for f in fields(OncoplotOptions))
     assert names[:105] == baseline
-    assert names[105:] == ("gene_bar_label_position",)
+    assert names[105:106] == ("gene_bar_label_position",)
 
 
 def test_multiple_numeric_source_order_and_titles():

@@ -74,4 +74,5 @@ result.save("oncoplot.png", dpi=120)
 | [Options Reference](options-reference.md) | layout, text, legend, and rendering knobs |
 | [Rendering Backends](rendering-backends.md) | Plotly vs Matplotlib behavior |
 | [Gallery](gallery.md) | deterministic local examples |
+| [Legend columns and rotation](examples/legend-columns-rotation.md) | compact categorical columns and histogram labels |
 | [Troubleshooting](troubleshooting.md) | common errors and fixes |

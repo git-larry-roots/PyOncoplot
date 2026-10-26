@@ -42,8 +42,8 @@ metadata_legend_orientation_heatmap="horizontal" already select horizontal
 colorbars; no duplicate orientation API was added. Existing
 metadata_legend_nrow/metadata_legend_ncol, legend font sizes, key sizes and
 manual legend_offsets remain available in legacy layout. Compact mode uses
-measured automatic column packing rather than manual row/column counts, and
-rejects manual offsets and manual metadata legend row/column counts. Increase width/height or reduce fonts if the requested
+measured automatic packing and honors categorical metadata row/column requests;
+only manual offsets are rejected. See [legend columns and rotation](legend-columns-rotation.md). Increase width/height or reduce fonts if the requested
 layout cannot fit. Compact mode does not yet support continuous main-grid
 variant-value colorbars; that combination explicitly raises NotImplementedError,
 while legacy layout continues to render those grids.
