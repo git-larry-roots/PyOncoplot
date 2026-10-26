@@ -1297,9 +1297,17 @@ def prepare_oncoplot_data(
     gene_denominators: Optional[Mapping[str, float]] = None,
     row_summaries: Optional[pd.DataFrame] = None,
     verbose: bool = False,
+    metadata_filters: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    metadata_filter_mode: Optional[str] = None,
 ) -> PreparedOncoplotData:
     """Validate and transform mutation-level data into oncoplot-ready tables."""
 
+    if metadata_filters is not None and not isinstance(metadata_filters, Mapping):
+        raise ValueError("metadata_filters must be a mapping by original source column.")
+    if metadata_filter_mode not in (None, "analysis_cohort"):
+        raise ValueError("metadata_filter_mode must be analysis_cohort or None; display-only is unsupported.")
+    if metadata_filters and metadata_filter_mode != "analysis_cohort":
+        raise ValueError("Nonempty metadata_filters require metadata_filter_mode='analysis_cohort'.")
     tooltip_was_generated = tooltip_col is None
     validation_tooltip_col = sample_col if tooltip_was_generated else tooltip_col
     metadata_sample_col = metadata_sample_col or sample_col
@@ -1393,6 +1401,21 @@ def prepare_oncoplot_data(
     if metadata is None and metadata_cols is not None:
         metadata = _derive_metadata_from_data(data, metadata_sample_col, metadata_cols)
     metadata = _validate_metadata(metadata, metadata_sample_col)
+    from ._metadata_filters import metadata_filter_samples
+    candidates = list(data[sample_col]) if metadata_filters else []
+    if metadata_filters and metadata is not None:
+        candidates.extend(metadata[metadata_sample_col])
+    if metadata_filters and cell_states is not None and sample_col in cell_states:
+        candidates.extend(cell_states[sample_col])
+    if metadata_filters and prepare_tmb and tmb_data is not None:
+        candidates.extend(_custom_tmb_sample_ids(tmb_data, sample_col))
+    eligible_metadata_samples = metadata_filter_samples(
+        metadata, metadata_sample_col, candidates, metadata_filters)
+    if eligible_metadata_samples is not None:
+        data = data[data[sample_col].isin(eligible_metadata_samples)].copy()
+        metadata = metadata[metadata[metadata_sample_col].isin(eligible_metadata_samples)].copy()
+        if sample_order is not None:
+            sample_order = [s for s in sample_order if str(s) in eligible_metadata_samples]
     pathway_df, _pathway_col = _validate_pathway(pathway, pathway_gene_col, gene_col)
 
     if sample_filters_active:
@@ -1451,6 +1474,8 @@ def prepare_oncoplot_data(
     states, state_palette = validate_cell_states(
         cell_states, cell_state_palette, data, gene_col, sample_col
     )
+    if eligible_metadata_samples is not None:
+        states = states[states["Sample"].isin(eligible_metadata_samples)].copy()
     if sample_filters_active:
         states = states[states["Sample"].isin(passing_sample_ids)].copy()
 
@@ -1517,6 +1542,8 @@ def prepare_oncoplot_data(
     samples_with_custom_tmb = (
         _custom_tmb_sample_ids(tmb_data, sample_col) if prepare_tmb and tmb_data is not None else []
     )
+    if eligible_metadata_samples is not None:
+        samples_with_custom_tmb = [s for s in samples_with_custom_tmb if s in eligible_metadata_samples]
     if mutation_filters_active or sample_filters_active:
         eligible_custom_tmb_samples = set(samples_with_any_mutations) | set(samples_with_metadata)
         samples_with_custom_tmb = [
