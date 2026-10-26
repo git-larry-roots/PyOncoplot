@@ -296,3 +296,25 @@ figure (height=520, approximately 4.33 inches). The external cohort has 20 subje
 recorded events and unresolved states are not confirmed biological negatives.
 Original-canvas geometry and exports are tested, not every PDF/SVG viewer or
 physical printer.
+
+### Independent compact metadata legend placement
+
+Matplotlib compact bottom layouts accept metadata_legend_order: a sequence of
+original source-column names, independently of metadata-track order. Listed
+groups appear first, followed by unlisted groups in their original metadata
+order. Numeric colorbars may be interleaved with categorical groups. An empty
+sequence uses original metadata order; None preserves historical categorical-first
+placement and right-anchored numeric bars.
+
+metadata_legend_alignment is a source-keyed mapping with values 'top' or 'center'.
+Unspecified entries stay centered. Alignment measures complete rendered bounds,
+including numeric titles and ticks. Display-title overrides do not change keys.
+Unknown keys, duplicate order entries and invalid alignments raise ValueError.
+Legacy Matplotlib and Plotly reject non-default order/alignment explicitly.
+
+Reuse legend_gap_points (for example 1) for tight horizontal and shelf gaps, and
+tmb_height_ratio for histogram height. Compact fitting grows requested panel
+weights only when measured text clearance requires it; rotated multiline labels
+may impose a physical minimum. No manual coordinates or dataset presets are used.
+
+See [the public synthetic example](examples/legend-order-alignment.md).

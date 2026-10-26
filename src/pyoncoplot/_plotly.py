@@ -1796,7 +1796,7 @@ def render_plotly_oncoplot(
         raise NotImplementedError("State style mappings currently require backend='matplotlib'.")
     defaults = OncoplotOptions()
     unsupported = [name for name in (
-        "gene_bar_label_position", "gene_bar_color", "gene_bar_x_label", "legend_gap_points", "compact_layout", "sample_id_padding", "title_gap_points", "metadata_track_heights",
+        "metadata_legend_order", "metadata_legend_alignment", "gene_bar_label_position", "gene_bar_color", "gene_bar_x_label", "legend_gap_points", "compact_layout", "sample_id_padding", "title_gap_points", "metadata_track_heights",
         "metadata_track_spacing", "metadata_numeric_scales", "tmb_bar_color", "tmb_bar_width",
         "tmb_tick_interval", "tmb_y_label", "tmb_y_label_angle", "gene_bar_label_format", "tile_edgecolor", "row_separator_color",
     ) if getattr(options, name) != getattr(defaults, name)]
