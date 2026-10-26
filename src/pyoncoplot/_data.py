@@ -74,6 +74,10 @@ class PreparedOncoplotData:
     main_grid_rows: Optional[pd.DataFrame] = None
     main_grid_tiles: Optional[pd.DataFrame] = None
     main_grid_mode: str = "legacy"
+    cell_states: Optional[pd.DataFrame] = None
+    cell_state_palette: Optional[Mapping[str, str]] = None
+    row_summary: Optional[pd.DataFrame] = None
+    row_summary_external: bool = False
 
 
 def _is_dataframe(value: Any) -> bool:
@@ -171,10 +175,11 @@ def _validate_mutation_inputs(
     sample_col: str,
     mutation_type_col: Optional[str],
     tooltip_col: str,
+    allow_empty: bool = False,
 ) -> pd.DataFrame:
     if not _is_dataframe(data):
         raise TypeError("data must be a pandas DataFrame.")
-    if data.empty:
+    if data.empty and not allow_empty:
         raise ValueError("data must contain at least one mutation row.")
     check_valid_dataframe_columns(data, [gene_col, sample_col, tooltip_col])
     _validate_id_column(data, sample_col, "Sample")
@@ -776,16 +781,13 @@ def _pathway_summary(
     path_by_gene = dict(zip(pathway["Gene"].astype(str), pathway["Pathway"].astype(str)))
     pathway_by_gene = {str(gene): path_by_gene.get(str(gene), "Other") for gene in genes}
     groups: List[PathwayGroup] = []
-    for pathway_name in unique_preserve_order(pathway_by_gene[gene] for gene in genes):
-        indexes = [index for index, gene in enumerate(genes) if pathway_by_gene[gene] == pathway_name]
-        groups.append(
-            PathwayGroup(
-                name=str(pathway_name),
-                genes=[str(genes[index]) for index in indexes],
-                start=min(indexes),
-                end=max(indexes),
-            )
-        )
+    for index, gene in enumerate(genes):
+        pathway_name = pathway_by_gene[gene]
+        if groups and groups[-1].name == pathway_name:
+            groups[-1].genes.append(str(gene))
+            groups[-1].end = index
+        else:
+            groups.append(PathwayGroup(name=str(pathway_name), genes=[str(gene)], start=index, end=index))
     return pathway_by_gene, groups
 
 
@@ -1289,6 +1291,11 @@ def prepare_oncoplot_data(
     variant_value_missing: str = "blank",
     variant_value_scale: str = "per_column",
     main_grid_rows: Optional[Sequence[Mapping[str, object]]] = None,
+    preserve_empty_genes: bool = False,
+    cell_states: Optional[pd.DataFrame] = None,
+    cell_state_palette: Optional[Mapping[str, str]] = None,
+    gene_denominators: Optional[Mapping[str, float]] = None,
+    row_summaries: Optional[pd.DataFrame] = None,
     verbose: bool = False,
 ) -> PreparedOncoplotData:
     """Validate and transform mutation-level data into oncoplot-ready tables."""
@@ -1358,7 +1365,10 @@ def prepare_oncoplot_data(
         else None
     )
 
-    data = _validate_mutation_inputs(data, gene_col, sample_col, mutation_type_col, validation_tooltip_col)
+    data = _validate_mutation_inputs(
+        data, gene_col, sample_col, mutation_type_col, validation_tooltip_col,
+        allow_empty=preserve_empty_genes,
+    )
     if tooltip_was_generated:
         tooltip_col = "__pyoncoplot_default_tooltip__"
         while tooltip_col in data.columns:
@@ -1436,20 +1446,38 @@ def prepare_oncoplot_data(
         if metadata is not None:
             metadata = metadata[metadata[metadata_sample_col].isin(passing_sample_ids)].copy()
 
+    from ._cell_states import validate_cell_states, prepare_row_summary
+
+    states, state_palette = validate_cell_states(
+        cell_states, cell_state_palette, data, gene_col, sample_col
+    )
+    if sample_filters_active:
+        states = states[states["Sample"].isin(passing_sample_ids)].copy()
+
     if metadata is not None and metadata_require_mutations:
         metadata = metadata[metadata[metadata_sample_col].isin(pd.unique(data[sample_col]))].copy()
 
-    genes = _get_genes_for_oncoplot(
-        data=data,
-        gene_col=gene_col,
-        sample_col=sample_col,
-        top_n=top_n,
-        include_genes=include_genes,
-        ignore_genes=ignore_genes,
-        return_extra_genes_if_tied=return_extra_genes_if_tied,
-        verbose=verbose,
-    )
-    if pathway_df is not None:
+    if preserve_empty_genes:
+        if include_genes is None or isinstance(include_genes, (str, bytes)) or len(include_genes) == 0:
+            raise ValueError("preserve_empty_genes requires a nonempty include_genes sequence.")
+        if _empty_or_missing_mask(pd.Series(list(include_genes), dtype=object)).any():
+            raise ValueError("Preserved genes cannot contain missing or empty identifiers.")
+        ignored = set(map(str, ignore_genes or []))
+        genes = [str(gene) for gene in include_genes if str(gene) not in ignored]
+        if len(genes) != len(set(genes)) or not genes or any(not gene for gene in genes):
+            raise ValueError("Preserved genes must be unique, nonempty identifiers.")
+    else:
+        genes = _get_genes_for_oncoplot(
+            data=data,
+            gene_col=gene_col,
+            sample_col=sample_col,
+            top_n=top_n,
+            include_genes=include_genes,
+            ignore_genes=ignore_genes,
+            return_extra_genes_if_tied=return_extra_genes_if_tied,
+            verbose=verbose,
+        )
+    if pathway_df is not None and not preserve_empty_genes:
         genes = rank_genes_by_pathway(
             pathway_df,
             gene_ranks=genes,
@@ -1494,13 +1522,19 @@ def prepare_oncoplot_data(
         samples_with_custom_tmb = [
             sample for sample in samples_with_custom_tmb if sample in eligible_custom_tmb_samples
         ]
+    states = states[states["Gene"].isin(genes)].copy()
     all_sample_ids = unique_preserve_order(
         list(samples_with_selected_mutations)
         + list(samples_with_any_mutations)
         + list(samples_with_metadata)
         + list(samples_with_custom_tmb)
+        + states["Sample"].tolist()
     )
     samples_to_show = list(all_sample_ids if show_all_samples else samples_with_selected_mutations)
+
+    if not states.empty:
+        selected_state_samples = states.loc[states["Gene"].isin(genes), "Sample"].tolist()
+        samples_to_show = unique_preserve_order(samples_to_show + selected_state_samples)
 
     if metadata_sort_cols is not None:
         if metadata is None:
@@ -1621,7 +1655,15 @@ def prepare_oncoplot_data(
         include_variant_summaries=tooltip_was_generated,
     )
 
+    states = states[states["Gene"].isin(genes) & states["Sample"].isin(samples_to_show)].copy()
+    row_summary = prepare_row_summary(
+        row_summaries, gene_denominators, gene_col, genes, tiles, cell_states is not None
+    )
     return PreparedOncoplotData(
+        cell_states=states,
+        cell_state_palette=state_palette,
+        row_summary=row_summary,
+        row_summary_external=row_summaries is not None,
         tiles=tiles.reset_index(drop=True),
         samples=samples_to_show,
         genes=genes,

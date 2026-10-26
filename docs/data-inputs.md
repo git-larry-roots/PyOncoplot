@@ -206,3 +206,9 @@ The data preparation layer checks:
 - metadata sample identifiers must be unique.
 - pathway input must have exactly two columns and no duplicate genes.
 - palette coverage must include all displayed mutation types.
+
+## Non-event observations and independent summaries
+
+See [empty rows, cell states, and external row summaries](examples/cell-states.md) for
+`preserve_empty_genes`, `cell_states`, `cell_state_palette`, `gene_denominators`, `row_summaries`, including explicit denominator rules
+and a runnable synthetic example for both rendering backends.

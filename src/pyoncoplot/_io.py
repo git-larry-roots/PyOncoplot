@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 
 
-TABLE_PARAM_KEYS = {"data", "metadata", "tmb_data", "pathway"}
+TABLE_PARAM_KEYS = {"data", "metadata", "tmb_data", "pathway", "cell_states", "row_summaries"}
 
 
 def _is_path_like(value: Any) -> bool:

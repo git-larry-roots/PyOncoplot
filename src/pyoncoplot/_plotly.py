@@ -1586,6 +1586,36 @@ def _add_main_tiles(
             )
 
 
+def _add_cell_states(fig, prepared, row, col, options):
+    from ._cell_states import state_grid
+
+    go, _ = _require_plotly()
+    grid = state_grid(prepared)
+    if grid.empty:
+        return
+    expanded = _has_expanded_main_grid(prepared)
+    for state, observations in grid.groupby("State", sort=False):
+        z = np.full((len(prepared.main_grid_rows), len(prepared.samples)), np.nan)
+        positions = {sample: i for i, sample in enumerate(prepared.samples)}
+        for observation in observations.itertuples():
+            z[observation.RowIndex, positions[observation.Sample]] = 1
+        color = prepared.cell_state_palette[state]
+        fig.add_trace(go.Heatmap(
+            x=prepared.samples,
+            y=list(range(len(z))) if expanded else prepared.genes,
+            z=z, colorscale=[[0, color], [1, color]], showscale=False,
+            hoverongaps=False, xgap=1, ygap=1,
+            hovertemplate="Sample: %{x}<br>Cell state: " + str(state) + "<extra></extra>",
+            name=f"Cell state: {state}",
+        ), row=row, col=col)
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers",
+            marker=dict(symbol="square", color=color, size=10),
+            name=f"Cell state: {state}", legendgroup="cell_states",
+            showlegend=options.show_legend and options.mutation_legend_position != "none",
+        ), row=row, col=col)
+
+
 def _add_gene_bar(
     fig,
     prepared: PreparedOncoplotData,
@@ -1596,9 +1626,6 @@ def _add_gene_bar(
     show_gene_bar_legend: bool = False,
 ):
     go, _make_subplots = _require_plotly()
-    tiles = prepared.tiles
-    if tiles.empty:
-        return
 
     expanded = _has_expanded_main_grid(prepared)
     if expanded:
@@ -1614,32 +1641,36 @@ def _add_gene_bar(
         y_values = prepared.genes
         bar_widths = 1
 
-    total_counts = tiles.groupby("Gene", observed=False).size().reindex(prepared.genes, fill_value=0)
-    denominator = max(prepared.total_samples, 1)
-    mutation_groups = [
-        (mutation_type, tiles[tiles["MutationType"].astype(str) == mutation_type])
-        for mutation_type in _mutation_levels(prepared, palette)
-    ]
-    unspecified = tiles[tiles["MutationType"].isna()]
-    if not unspecified.empty:
-        mutation_groups.append((np.nan, unspecified))
+    from ._cell_states import summary_groups
 
-    for mutation_type, group in mutation_groups:
-        counts = group.groupby("Gene", observed=False).size().reindex(prepared.genes, fill_value=0)
+    total_counts, denominators, mutation_groups = summary_groups(prepared, _mutation_levels(prepared, palette))
+    for mutation_type, counts in mutation_groups:
         if options.gene_bar_mode == "percent":
-            values = (counts / total_counts.replace(0, np.nan) * 100).fillna(0.0)
+            values = (counts / (denominators if prepared.row_summary is not None else total_counts).replace(0, np.nan) * 100).fillna(0.0)
         else:
             values = counts
         mutation_label = _legend_label(mutation_type, options)
         mutation_legend_label = _legend_entry_label(mutation_type, options)
-        hover = [
-            "Total Samples Mutated: "
-            f"{int(total_counts[gene])} ({as_percent(total_counts[gene] / max(prepared.total_samples, 1), options.gene_bar_label_round)} of all samples)"
-            "<br>"
-            f"{mutation_label}: {int(counts[gene])} "
-            f"({as_percent(counts[gene] / max(total_counts[gene], 1), options.gene_bar_label_round)} of all mutations in this gene)"
-            for gene in prepared.genes
-        ]
+        hover = []
+        for gene in prepared.genes:
+            if prepared.row_summary is None:
+                text = (
+                    "Total Samples Mutated: "
+                    f"{int(total_counts[gene])} ({as_percent(total_counts[gene] / denominators[gene], options.gene_bar_label_round)} of all samples)"
+                    "<br>"
+                    f"{mutation_label}: {int(counts[gene])} "
+                    f"({as_percent(counts[gene] / max(total_counts[gene], 1), options.gene_bar_label_round)} of all mutations in this gene)"
+                )
+            else:
+                source = "External summary" if prepared.row_summary_external else "Recorded mutated samples"
+                text = f"{source}: {int(total_counts[gene])}"
+                if pd.notna(denominators[gene]):
+                    text += f" / {denominators[gene]:g} declared denominator ({as_percent(total_counts[gene] / denominators[gene], options.gene_bar_label_round)})"
+                else:
+                    text += " (denominator not supplied; percentage unavailable)"
+                if not prepared.row_summary_external:
+                    text += f"<br>{mutation_label}: {int(counts[gene])}"
+            hover.append(text)
         color = options.unspecified_mutation_color if pd.isna(mutation_type) else palette.get(str(mutation_type), options.unspecified_mutation_color)
         fig.add_trace(
             go.Bar(
@@ -1672,7 +1703,8 @@ def _add_gene_bar(
     if options.show_gene_bar_labels:
         max_total = 100.0 if options.gene_bar_mode == "percent" else max(float(total_counts.max()), 1.0)
         if options.gene_bar_mode == "percent":
-            label_x = pd.Series(max_total, index=total_counts.index)
+            label_x = (total_counts / denominators * 100 if prepared.row_summary is not None
+                       else pd.Series(max_total, index=total_counts.index))
         else:
             label_x = total_counts.astype(float)
         label_x = label_x + max_total * options.gene_bar_label_padding + options.gene_bar_label_nudge
@@ -1682,7 +1714,7 @@ def _add_gene_bar(
                 y=y_values,
                 mode="text",
                 text=[
-                    as_percent(total_counts[gene] / denominator, options.gene_bar_label_round)
+                    as_percent(total_counts[gene] / denominators[gene], options.gene_bar_label_round)
                     for gene in prepared.genes
                 ],
                 textposition="middle right",
@@ -1705,11 +1737,16 @@ def _add_gene_bar(
             row=row,
             col=col,
         )
+    axis_title = "Mutation Type (%)" if options.gene_bar_mode == "percent" else "Samples"
+    if prepared.row_summary is not None:
+        axis_title = "External summary" if prepared.row_summary_external else "Samples"
+        if options.gene_bar_mode == "percent":
+            axis_title += " (%)"
     if not options.show_gene_bar_axis:
         fig.update_xaxes(showticklabels=False, ticks="", row=row, col=col)
     else:
         fig.update_xaxes(
-            title_text="Mutation Type (%)" if options.gene_bar_mode == "percent" else "Samples",
+            title_text=axis_title,
             tickfont=_font_options(options.font_size_gene_bar_axis, options),
             title_font=_font_options(options.font_size_gene_bar_axis, options),
             row=row,
@@ -1749,6 +1786,8 @@ def render_plotly_oncoplot(
     options = coerce_options(merged["options"])
     draw_gene_bar = merged["draw_gene_bar"]
     draw_tmb_bar = merged["draw_tmb_bar"]
+    from ._cell_states import configure_summary_rendering
+    options = configure_summary_rendering(prepared, options, draw_gene_bar)
     copy_on_click = merged["copy_on_click"]
 
     go, make_subplots = _require_plotly()
@@ -1814,6 +1853,7 @@ def render_plotly_oncoplot(
 
     main_row = row_by_name["main"]
     _add_main_tiles(figure, prepared, main_row, 1, palette, variant_value_palette, options, copy_on_click)
+    _add_cell_states(figure, prepared, main_row, 1, options)
     if has_gene_bar:
         _add_gene_bar(
             figure,

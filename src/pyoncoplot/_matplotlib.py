@@ -822,10 +822,24 @@ def _draw_main(
     return variant_legends
 
 
-def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str], options: OncoplotOptions):
-    tiles = prepared.tiles
-    if tiles.empty:
+def _draw_cell_states(ax, prepared, options):
+    from ._cell_states import state_grid
+    from matplotlib.patches import Rectangle
+
+    grid = state_grid(prepared)
+    if grid.empty:
         return
+    sample_positions = {sample: i for i, sample in enumerate(prepared.samples)}
+    for observation in grid.itertuples():
+        ax.add_patch(Rectangle(
+            (sample_positions[observation.Sample], observation.RowIndex),
+            options.tile_width, options.tile_height,
+            facecolor=prepared.cell_state_palette[observation.State],
+            edgecolor="white", linewidth=options.tile_linewidth, hatch="//",
+        ))
+
+
+def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str], options: OncoplotOptions):
     expanded = _has_expanded_main_grid(prepared)
     if expanded:
         gene_centers = _main_grid_gene_centers(prepared)
@@ -842,29 +856,24 @@ def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str
         bar_heights = 0.85
         y_limit = len(prepared.genes)
     left = np.zeros(len(prepared.genes))
-    mutation_groups = [
-        (mutation_type, tiles[tiles["MutationType"].astype(str) == mutation_type])
-        for mutation_type in _mutation_levels(prepared, palette)
-    ]
-    unspecified = tiles[tiles["MutationType"].isna()]
-    if not unspecified.empty:
-        mutation_groups.append((np.nan, unspecified))
-    total_counts = tiles.groupby("Gene", observed=False).size().reindex(prepared.genes, fill_value=0).to_numpy(dtype=float)
-    for mutation_type, group in mutation_groups:
-        counts = group.groupby("Gene", observed=False).size().reindex(prepared.genes, fill_value=0).to_numpy(dtype=float)
+    from ._cell_states import summary_groups
+
+    total_counts, denominators, mutation_groups = summary_groups(prepared, _mutation_levels(prepared, palette))
+    for mutation_type, counts in mutation_groups:
         if options.gene_bar_mode == "percent":
-            values = np.divide(counts, total_counts, out=np.zeros_like(counts), where=total_counts > 0) * 100
+            values = (counts / (denominators if prepared.row_summary is not None else total_counts).replace(0, np.nan) * 100).fillna(0).to_numpy()
         else:
             values = counts
         color = options.unspecified_mutation_color if pd.isna(mutation_type) else palette.get(str(mutation_type), options.unspecified_mutation_color)
         ax.barh(y_positions, values, left=left, height=bar_heights, color=color)
         left = left + values
     if options.show_gene_bar_labels:
-        totals = total_counts
-        denominator = max(prepared.total_samples, 1)
+        totals = total_counts.to_numpy()
         max_total = 100 if options.gene_bar_mode == "percent" else max(left.max(), 1)
-        for y_position, total in zip(y_positions, totals):
+        for y_position, total, denominator in zip(y_positions, totals, denominators):
             label_x = (100 if options.gene_bar_mode == "percent" else total)
+            if prepared.row_summary is not None and options.gene_bar_mode == "percent":
+                label_x = total / denominator * 100
             ax.text(
                 label_x + max_total * options.gene_bar_label_padding + options.gene_bar_label_nudge,
                 y_position,
@@ -873,15 +882,23 @@ def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str
                 ha="left",
                 fontsize=options.font_size_gene_bar_axis,
             )
-        ax.set_xlim(0, max(left.max() * (1 + options.gene_bar_label_padding + 0.08), left.max() + 1))
+        if prepared.row_summary is not None and options.gene_bar_mode == "percent":
+            ax.set_xlim(0, max(float(left.max()) + 100 * options.gene_bar_label_padding + options.gene_bar_label_nudge, 1) * 1.15)
+        else:
+            ax.set_xlim(0, max(left.max() * (1 + options.gene_bar_label_padding + 0.08), left.max() + 1))
     elif options.gene_bar_mode == "percent":
         ax.set_xlim(0, 100)
     ax.set_ylim(0, y_limit)
     ax.invert_yaxis()
     ax.set_yticks([])
+    axis_title = "Mutation Type (%)" if options.gene_bar_mode == "percent" else "Samples"
+    if prepared.row_summary is not None:
+        axis_title = "External summary" if prepared.row_summary_external else "Samples"
+        if options.gene_bar_mode == "percent":
+            axis_title += " (%)"
     if options.show_gene_bar_axis:
         ax.set_xlabel(
-            "Mutation Type (%)" if options.gene_bar_mode == "percent" else "Samples",
+            axis_title,
             fontsize=options.font_size_gene_bar_axis,
         )
         if options.gene_bar_scale_breaks is not None:
@@ -1453,6 +1470,8 @@ def render_matplotlib_oncoplot(
     options = coerce_options(merged["options"])
     draw_gene_bar = merged["draw_gene_bar"]
     draw_tmb_bar = merged["draw_tmb_bar"]
+    from ._cell_states import configure_summary_rendering
+    options = configure_summary_rendering(prepared, options, draw_gene_bar)
 
     plt, _ListedColormap, GridSpec, Patch, _Rectangle = _require_matplotlib()
     draw_metadata = prepared.metadata is not None and bool(prepared.metadata_cols)
@@ -1508,6 +1527,7 @@ def render_matplotlib_oncoplot(
     if draw_metadata and "metadata" in axes:
         metadata_legends = _draw_metadata(axes["metadata"], prepared, options, metadata_palette=metadata_palette)
     variant_value_legends = _draw_main(axes["main"], prepared, palette, variant_value_palette, options)
+    _draw_cell_states(axes["main"], prepared, options)
     if draw_gene_bar and "gene_bar" in axes:
         _draw_gene_bar(axes["gene_bar"], prepared, palette, options)
         if draw_metadata and options.metadata_position == "bottom" and options.show_gene_bar_axis:
@@ -1534,6 +1554,11 @@ def render_matplotlib_oncoplot(
             Patch(color=palette.get(name, options.unspecified_mutation_color), label=_legend_entry_label(name, options))
             for name in _mutation_levels(prepared, palette)
         ]
+    if options.show_legend and options.mutation_legend_position != "none" and prepared.cell_states is not None:
+        mutation_handles.extend(
+            Patch(facecolor=prepared.cell_state_palette[state], hatch="//", label=f"Cell state: {state}")
+            for state in pd.unique(prepared.cell_states.State)
+        )
     has_bottom_mutation_legend = bool((mutation_handles or tmb_handles) and options.mutation_legend_position == "bottom")
     has_bottom_metadata_legend = _metadata_has_bottom_legends(metadata_legends, options)
     if has_bottom_mutation_legend and has_bottom_metadata_legend:

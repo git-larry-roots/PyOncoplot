@@ -226,3 +226,9 @@ implementation is not intended to be pixel-identical to the ggplot output, but
 it follows the same core data semantics: top-gene selection, multi-hit collapse,
 sample sorting, metadata handling, pathway grouping, TMB bars, and mutation
 palettes.
+
+## Non-event observations and independent summaries
+
+See [empty rows, cell states, and external row summaries](docs/examples/cell-states.md) for
+`preserve_empty_genes`, `cell_states`, `cell_state_palette`, `gene_denominators`, `row_summaries`, including explicit denominator rules
+and a runnable synthetic example for both rendering backends.
