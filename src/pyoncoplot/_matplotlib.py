@@ -888,6 +888,8 @@ def _draw_gene_bar(ax, prepared: PreparedOncoplotData, palette: Mapping[str, str
             label_x = (100 if options.gene_bar_mode == "percent" else total)
             if prepared.row_summary is not None and options.gene_bar_mode == "percent":
                 label_x = total / denominator * 100
+            if options.gene_bar_label_position == "column":
+                label_x = float(left.max())
             ax.text(
                 label_x + max_total * options.gene_bar_label_padding + options.gene_bar_label_nudge,
                 y_position,
@@ -1000,7 +1002,13 @@ def _draw_tmb(
         axis_label = prepared.tmb_value_col
         if options.log10_transform_tmb:
             axis_label = f"log10 {axis_label}"
-        ax.set_ylabel(options.tmb_y_label if options.tmb_y_label is not None else axis_label, fontsize=options.font_size_tmb_axis)
+        label = options.tmb_y_label if options.tmb_y_label is not None else axis_label
+        ax.set_ylabel(label, fontsize=options.font_size_tmb_axis)
+        if options.compact_layout and "\n" in label:
+            # Explicit line breaks already make this readable horizontally.
+            ax.yaxis.label.set_rotation(0)
+            ax.yaxis.label.set_horizontalalignment("right")
+            ax.yaxis.label.set_verticalalignment("center")
     ax.tick_params(axis="y", labelsize=options.font_size_tmb_axis)
     if options.tmb_tick_interval is not None:
         from matplotlib.ticker import MultipleLocator
@@ -1520,7 +1528,9 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         numeric = [legend for legend in metadata_legends if legend.is_numeric]
     left, right = band
     available = right - left
-    cursor_x, cursor_y, row_height = left, .02, 0.0
+    cursor_x, row_height = left, 0.0
+    shelves = [[]]
+    shelf_heights = []
     gap = options.legend_gap_points / 72 / figure.get_figheight()
     horizontal_gap = options.legend_gap_points / 72 / figure.get_figwidth()
     for handles, title, size, title_size, key_size in groups:
@@ -1542,9 +1552,10 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         if bbox.width > available:
             raise ValueError("Legend labels exceed figure width; increase width or reduce legend font size.")
         if cursor_x + bbox.width > right + 1e-10:
-            cursor_y += row_height + gap
+            shelf_heights.append(row_height)
+            shelves.append([])
             cursor_x, row_height = left, 0.0
-        legend.set_bbox_to_anchor((cursor_x, cursor_y), transform=figure.transFigure)
+        shelves[-1].append((legend, bbox, cursor_x))
         cursor_x += bbox.width + horizontal_gap
         row_height = max(row_height, bbox.height)
     # Numeric bars join the same shelf as categorical groups when their full
@@ -1559,14 +1570,33 @@ def _add_compact_legends(figure, mutation_handles, tmb_handles, metadata_legends
         if bbox.width > available:
             raise ValueError("Colorbar labels exceed figure width; increase width or reduce colorbar length/fonts.")
         if cursor_x + bbox.width > right + 1e-10:
-            cursor_y += row_height + gap
+            shelf_heights.append(row_height)
+            shelves.append([])
             cursor_x, row_height = left, 0.0
-        pos = ax.get_position()
-        ax.set_position([pos.x0 + cursor_x - bbox.x0, pos.y0 + cursor_y - bbox.y0,
-                         pos.width, pos.height])
+        shelves[-1].append((ax, bbox, cursor_x))
         cursor_x += bbox.width + horizontal_gap
         row_height = max(row_height, bbox.height)
-    return cursor_y + row_height + (gap if row_height else 0)
+    shelf_heights.append(row_height)
+    # Wrapping must retain top-to-bottom, left-to-right caller order. Numeric
+    # colorbars form a right-hand group, retaining their own metadata order.
+    top = .02 + sum(shelf_heights) + gap * (len(shelves) - 1)
+    y = top
+    for shelf, height in zip(shelves, shelf_heights):
+        y -= height
+        numeric_width = sum(box.width + horizontal_gap for artist, box, x in shelf
+                            if artist in figure.axes)
+        numeric_x = right - numeric_width + horizontal_gap
+        for artist, box, x in shelf:
+            aligned_y = y + (height - box.height) / 2
+            if artist in figure.axes:
+                pos = artist.get_position()
+                artist.set_position([pos.x0 + numeric_x - box.x0,
+                                     pos.y0 + aligned_y - box.y0, pos.width, pos.height])
+                numeric_x += box.width + horizontal_gap
+            else:
+                artist.set_bbox_to_anchor((x, aligned_y), transform=figure.transFigure)
+        y -= gap
+    return top + (gap if row_height else 0)
 
 
 def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
@@ -1627,15 +1657,16 @@ def _finish_compact_layout(figure, axes, sample_axis, legend_top, options):
             figure.canvas.draw()
             labels = ax.get_yticklabels()
             centers = [t.get_window_extent(renderer).y0 + t.get_window_extent(renderer).height / 2 for t in labels]
-            needed = max((
-                (a.get_window_extent(renderer).height + b.get_window_extent(renderer).height) / 2 + 2
-                for a, b in zip(labels, labels[1:])
-            ), default=0)
-            actual = min((abs(a-b) for a, b in zip(centers, centers[1:])), default=needed)
-            if actual >= needed or actual <= 0:
+            growth = max((
+                ((a.get_window_extent(renderer).height + b.get_window_extent(renderer).height) / 2 + 2)
+                / abs(ca - cb)
+                for a, b, ca, cb in zip(labels, labels[1:], centers, centers[1:])
+                if ca != cb
+            ), default=1)
+            if growth <= 1:
                 break
             weights = list(grid.get_height_ratios())
-            weights[index] *= needed / actual * 1.03
+            weights[index] *= growth * 1.03
             grid.set_height_ratios(weights)
             figure.subplots_adjust()
 

@@ -142,7 +142,11 @@ class OncoplotOptions:
     # Automatic compact spacing; append to preserve positional compatibility.
     legend_gap_points: float = 6.0
 
+    gene_bar_label_position: Literal["bar_end", "column"] = "bar_end"
+
     def __post_init__(self) -> None:
+        if self.gene_bar_label_position not in {"bar_end", "column"}:
+            raise ValueError("gene_bar_label_position must be bar_end or column.")
         if isinstance(self.legend_gap_points, bool):
             raise ValueError("legend_gap_points must be a finite nonnegative number.")
         if not isinstance(self.compact_layout, bool):
