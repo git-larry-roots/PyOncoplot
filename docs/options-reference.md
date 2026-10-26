@@ -226,3 +226,11 @@ for compact legends, outer sample labels, marginal bar styling, numeric metadata
 scales, per-track sizing, independent grid styles, title spacing, and display-label
 overrides. The [executable synthetic example](examples/publication_layout.py)
 exports PNG, PDF and SVG through the public Matplotlib API.
+
+### Publication refinement controls
+
+See [the executable refinement example](examples/publication_refinements.py)
+and [the detailed option table](examples/publication-layout.md#publication-refinements-issue-5)
+for `gene_bar_color`, `gene_bar_x_label`, extended `cell_state_palette` styles,
+column-keyed `metadata_numeric_scales` marker/colorbar settings, multiline
+`legend_title_overrides`, and Matplotlib panel-ratio semantics.

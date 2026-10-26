@@ -75,7 +75,7 @@ class PreparedOncoplotData:
     main_grid_tiles: Optional[pd.DataFrame] = None
     main_grid_mode: str = "legacy"
     cell_states: Optional[pd.DataFrame] = None
-    cell_state_palette: Optional[Mapping[str, str]] = None
+    cell_state_palette: Optional[Mapping[str, str | Mapping[str, Any]]] = None
     row_summary: Optional[pd.DataFrame] = None
     row_summary_external: bool = False
 
@@ -1293,7 +1293,7 @@ def prepare_oncoplot_data(
     main_grid_rows: Optional[Sequence[Mapping[str, object]]] = None,
     preserve_empty_genes: bool = False,
     cell_states: Optional[pd.DataFrame] = None,
-    cell_state_palette: Optional[Mapping[str, str]] = None,
+    cell_state_palette: Optional[Mapping[str, str | Mapping[str, Any]]] = None,
     gene_denominators: Optional[Mapping[str, float]] = None,
     row_summaries: Optional[pd.DataFrame] = None,
     verbose: bool = False,

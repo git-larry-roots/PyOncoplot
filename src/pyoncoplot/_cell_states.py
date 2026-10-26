@@ -16,6 +16,21 @@ def validate_cell_states(states, palette, data, gene_col, sample_col):
         if not isinstance(palette, Mapping):
             raise TypeError("cell_state_palette must be a mapping of state to color.")
         colors.update(palette)
+    from matplotlib.colors import is_color_like
+    for style in colors.values():
+        if isinstance(style, Mapping):
+            if set(style) - {"color", "hatch", "hatch_color", "edgecolor", "linewidth"}:
+                raise ValueError("State styles accept color, hatch, hatch_color, edgecolor, linewidth.")
+            if "hatch" in style and (not isinstance(style["hatch"], str) or set(style["hatch"]) - set("/\\|-+xoO.*")):
+                raise ValueError("Invalid state hatch pattern.")
+            width = style.get("linewidth", 0)
+            if isinstance(width, bool) or not isinstance(width, (int, float)) or not np.isfinite(width) or width < 0:
+                raise ValueError("State linewidth must be finite and nonnegative.")
+            values = [style[k] for k in ("color", "hatch_color", "edgecolor") if k in style]
+        else:
+            values = [style]
+        if any(not is_color_like(value) for value in values):
+            raise ValueError("Invalid cell state color.")
     if states is None:
         return pd.DataFrame(columns=["Gene", "Sample", "State"]), colors
     if not isinstance(states, pd.DataFrame):
@@ -110,9 +125,18 @@ def configure_summary_rendering(prepared, options, draw_gene_bar):
     if (options.show_gene_bar_labels and options.gene_bar_label_format != "count") or options.gene_bar_mode == "percent":
         if prepared.row_summary.Denominator.isna().any():
             raise ValueError("Percentage summaries require explicit denominators for every displayed gene.")
-    if prepared.row_summary_external:
+    if prepared.row_summary_external and options.gene_bar_subplot_title is None:
         from dataclasses import replace
         options = replace(options)
-        title = options.gene_bar_subplot_title
-        options.gene_bar_subplot_title = "External summary" + (f": {title}" if title else "")
+        options.gene_bar_subplot_title = "External summary"
     return options
+
+
+def matplotlib_state_style(prepared, state, options):
+    """Resolve legacy color strings or state-keyed display styles."""
+    value = prepared.cell_state_palette[state]
+    style = dict(value) if isinstance(value, Mapping) else {"color": value}
+    return dict(facecolor=style.get("color", options.background_color),
+                hatch=style.get("hatch", "//"),
+                edgecolor=style.get("hatch_color", style.get("edgecolor", options.tile_edgecolor)),
+                linewidth=0 if isinstance(value, Mapping) else options.tile_linewidth)

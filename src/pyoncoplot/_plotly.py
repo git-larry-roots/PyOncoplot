@@ -1788,9 +1788,11 @@ def render_plotly_oncoplot(
     metadata_palette = merged["metadata_palette"]
     variant_value_palette = merged["variant_value_palette"]
     options = coerce_options(merged["options"])
+    if any(isinstance(value, Mapping) for value in (prepared.cell_state_palette or {}).values()):
+        raise NotImplementedError("State style mappings currently require backend='matplotlib'.")
     defaults = OncoplotOptions()
     unsupported = [name for name in (
-        "compact_layout", "sample_id_padding", "title_gap_points", "metadata_track_heights",
+        "gene_bar_color", "gene_bar_x_label", "compact_layout", "sample_id_padding", "title_gap_points", "metadata_track_heights",
         "metadata_track_spacing", "metadata_numeric_scales", "tmb_bar_color", "tmb_bar_width",
         "tmb_tick_interval", "tmb_y_label", "gene_bar_label_format", "tile_edgecolor", "row_separator_color",
     ) if getattr(options, name) != getattr(defaults, name)]
