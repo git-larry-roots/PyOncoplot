@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from collections.abc import Mapping
 from typing import Any, Callable, Literal, Optional, Sequence
 
@@ -119,7 +120,72 @@ class OncoplotOptions:
         )
     )
 
+    # Publication layout controls; lengths ending in _points are typographic points.
+    compact_layout: bool = False
+    sample_id_padding: float = 4.0
+    tmb_bar_color: Optional[str] = None
+    tmb_bar_width: float = 1.0  # sample units; spacing is 1 - width
+    tmb_tick_interval: Optional[int] = None
+    tmb_y_label: Optional[str] = None
+    gene_bar_label_format: Literal["percent", "count", "count_percent"] = "percent"
+    tile_edgecolor: str = "white"
+    row_separator_color: str = "#666666"
+    title_gap_points: float = 12.0
+    metadata_track_heights: Mapping[str, float] = field(default_factory=dict)
+    metadata_track_spacing: float = 0.0
+    metadata_numeric_scales: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    legend_label_overrides: Mapping[str, str] = field(default_factory=dict)
+    legend_title_overrides: Mapping[str, str] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
+        if not isinstance(self.compact_layout, bool):
+            raise ValueError("compact_layout must be a boolean.")
+        if self.tmb_y_label is not None and not isinstance(self.tmb_y_label, str):
+            raise ValueError("tmb_y_label must be a string or None.")
+        for name in ("sample_id_padding", "title_gap_points", "metadata_track_spacing",
+                     "tile_linewidth", "row_separator_linewidth"):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be finite and >= 0.")
+        if not isinstance(self.tmb_bar_width, (int, float)) or not math.isfinite(self.tmb_bar_width) or not 0 < self.tmb_bar_width <= 1:
+            raise ValueError("tmb_bar_width must be in (0, 1].")
+        if self.tmb_tick_interval is not None and (
+            isinstance(self.tmb_tick_interval, bool) or not isinstance(self.tmb_tick_interval, int)
+            or self.tmb_tick_interval < 1
+        ):
+            raise ValueError("tmb_tick_interval must be a positive integer.")
+        if self.gene_bar_label_format not in {"percent", "count", "count_percent"}:
+            raise ValueError("gene_bar_label_format must be percent, count, or count_percent.")
+        for name in ("metadata_track_heights", "metadata_numeric_scales", "legend_label_overrides", "legend_title_overrides"):
+            if not isinstance(getattr(self, name), Mapping):
+                raise ValueError(f"{name} must be a mapping.")
+        for value in self.metadata_track_heights.values():
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+                raise ValueError("metadata_track_heights values must be finite and > 0.")
+        for labels in (self.legend_label_overrides, self.legend_title_overrides):
+            if any(not isinstance(v, str) for v in labels.values()):
+                raise ValueError("legend overrides must map source labels to strings.")
+        for column, scale in self.metadata_numeric_scales.items():
+            if not isinstance(scale, Mapping) or set(scale) - {"min", "max", "ticks", "missing_color"}:
+                raise ValueError(f"Invalid metadata_numeric_scales entry for {column!r}.")
+            for bound in ("min", "max"):
+                if bound in scale and (not isinstance(scale[bound], (int, float)) or not math.isfinite(scale[bound])):
+                    raise ValueError("metadata scale bounds must be finite numbers.")
+            if "min" in scale and "max" in scale and scale["min"] >= scale["max"]:
+                raise ValueError("metadata scale min must be less than max.")
+            if "ticks" in scale:
+                ticks = scale["ticks"]
+                if (not isinstance(ticks, Sequence) or isinstance(ticks, str) or not ticks
+                    or any(not isinstance(t, (int, float)) or not math.isfinite(t) for t in ticks)
+                    or any(a >= b for a, b in zip(ticks, ticks[1:]))):
+                    raise ValueError("metadata scale ticks must be finite, strictly increasing numbers.")
+        from matplotlib.colors import is_color_like
+        colors = [self.tile_edgecolor, self.row_separator_color]
+        if self.tmb_bar_color is not None:
+            colors.append(self.tmb_bar_color)
+        colors.extend(s["missing_color"] for s in self.metadata_numeric_scales.values() if "missing_color" in s)
+        if any(not is_color_like(color) for color in colors):
+            raise ValueError("Publication layout colors must be valid colors.")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("width and height must be positive.")
         if self.selection_type not in {"none", "multiple", "single"}:

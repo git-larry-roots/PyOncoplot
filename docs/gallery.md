@@ -136,3 +136,9 @@ comparison sheets.
 
 - [Metadata Example](examples/metadata.md)
 - [BRCA Gallery Example](examples/brca-gallery.md)
+
+## Compact synthetic publication figure
+
+The [publication layout example](examples/publication-layout.md) combines aligned
+marginal bars, bottom categorical/numeric metadata, unresolved and empty rows,
+compact legends, and PNG/PDF/SVG exports without editing returned axes.

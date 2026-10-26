@@ -56,11 +56,15 @@ def _require_plotly():
 
 def _legend_label(value: object, options: OncoplotOptions) -> str:
     text = "Unspecified" if pd.isna(value) else str(value)
+    if text in options.legend_label_overrides:
+        return options.legend_label_overrides[text]
     return options.prettify_function(text) if options.prettify_legend_values else text
 
 
 def _legend_title(value: object, options: OncoplotOptions) -> str:
     text = "" if value is None else str(value)
+    if text in options.legend_title_overrides:
+        return options.legend_title_overrides[text]
     return options.prettify_function(text) if options.prettify_legend_titles else text
 
 
@@ -888,7 +892,7 @@ def _add_expanded_gene_separators(
                 x1=x1,
                 y0=boundary,
                 y1=boundary,
-                line=dict(color="#666666", width=options.row_separator_linewidth),
+                line=dict(color=options.row_separator_color, width=options.row_separator_linewidth),
                 opacity=0.65,
             )
 
@@ -1489,7 +1493,7 @@ def _add_main_tiles(
                         symbol="square",
                         size=13,
                         color=color,
-                        line=dict(color="white", width=options.tile_linewidth),
+                        line=dict(color=options.tile_edgecolor, width=options.tile_linewidth),
                     ),
                     name=_legend_entry_label(mutation_type, options),
                     text=group["Tooltip"].astype(str),
@@ -1513,7 +1517,7 @@ def _add_main_tiles(
                         symbol="square",
                         size=13,
                         color=options.unspecified_mutation_color,
-                        line=dict(color="white", width=options.tile_linewidth),
+                        line=dict(color=options.tile_edgecolor, width=options.tile_linewidth),
                     ),
                     name=_truncate_text("Mutation", options.legend_label_max_chars),
                     text=unspecified["Tooltip"].astype(str),
@@ -1606,12 +1610,12 @@ def _add_cell_states(fig, prepared, row, col, options):
             z=z, colorscale=[[0, color], [1, color]], showscale=False,
             hoverongaps=False, xgap=1, ygap=1,
             hovertemplate="Sample: %{x}<br>Cell state: " + str(state) + "<extra></extra>",
-            name=f"Cell state: {state}",
+            name=options.legend_label_overrides.get(f"Cell state: {state}", f"Cell state: {state}"),
         ), row=row, col=col)
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers",
             marker=dict(symbol="square", color=color, size=10),
-            name=f"Cell state: {state}", legendgroup="cell_states",
+            name=options.legend_label_overrides.get(f"Cell state: {state}", f"Cell state: {state}"), legendgroup="cell_states",
             showlegend=options.show_legend and options.mutation_legend_position != "none",
         ), row=row, col=col)
 
@@ -1784,6 +1788,15 @@ def render_plotly_oncoplot(
     metadata_palette = merged["metadata_palette"]
     variant_value_palette = merged["variant_value_palette"]
     options = coerce_options(merged["options"])
+    defaults = OncoplotOptions()
+    unsupported = [name for name in (
+        "compact_layout", "sample_id_padding", "title_gap_points", "metadata_track_heights",
+        "metadata_track_spacing", "metadata_numeric_scales", "tmb_bar_color", "tmb_bar_width",
+        "tmb_tick_interval", "tmb_y_label", "gene_bar_label_format", "tile_edgecolor", "row_separator_color",
+    ) if getattr(options, name) != getattr(defaults, name)]
+    if unsupported:
+        raise NotImplementedError("Publication controls currently require backend='matplotlib': " + ", ".join(unsupported))
+
     draw_gene_bar = merged["draw_gene_bar"]
     draw_tmb_bar = merged["draw_tmb_bar"]
     from ._cell_states import configure_summary_rendering

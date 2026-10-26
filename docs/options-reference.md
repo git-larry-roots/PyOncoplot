@@ -218,3 +218,11 @@ OncoplotOptions(
     metadata_numeric_plot_type="bar",
 )
 ```
+
+## Publication layout
+
+See [publication layout controls and backend limitations](examples/publication-layout.md)
+for compact legends, outer sample labels, marginal bar styling, numeric metadata
+scales, per-track sizing, independent grid styles, title spacing, and display-label
+overrides. The [executable synthetic example](examples/publication_layout.py)
+exports PNG, PDF and SVG through the public Matplotlib API.
